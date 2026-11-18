@@ -205,20 +205,27 @@ def code_block(doc, rel_path: str, first_line: int, n_lines: int, cap: str):
     start = first_line - 1
     end = min(start + n_lines, len(src))
     text = "\n".join(src[start:end])
-    caption(doc, f"{cap}（{rel_path}，第 {first_line}–{end} 行）", keep_next=True)
+    p = doc.add_paragraph()
+    pf = p.paragraph_format
+    pf.space_before = Pt(8)
+    pf.space_after = Pt(1)
+    pf.line_spacing = 1.0
+    pf.keep_with_next = True
+    r = p.add_run(f"{cap}    {rel_path}: {first_line}–{end}")
+    set_run_font(r, "宋体", 9.5, True)
     p = doc.add_paragraph()
     pf = p.paragraph_format
     pf.line_spacing = 1.0
-    pf.space_before = Pt(2)
-    pf.space_after = Pt(8)
-    pf.left_indent = Cm(0.3)
+    pf.space_before = Pt(0)
+    pf.space_after = Pt(10)
+    pf.left_indent = Cm(0.25)
     pPr = p._p.get_or_add_pPr()
     shd = OxmlElement("w:shd")
     shd.set(qn("w:fill"), "F5F5F5")
     pPr.append(shd)
     r = p.add_run(text)
     r.font.name = "Consolas"
-    r.font.size = Pt(9)
+    r.font.size = Pt(8)
     r._element.rPr.rFonts.set(qn("w:eastAsia"), "宋体")
 
 
@@ -557,7 +564,7 @@ perf = read_table("table_model_performance.csv")
 perf_h = perf[perf["数据集"] == "housing"]
 perf_h = perf_view(perf_h, with_dataset=False, with_params=True, with_time=False, with_roc=True)
 table(doc, perf_h, "表 6-2  housing 模型性能对比（5 种子均值±标准差）",
-      widths=[2.4, 2.8, 2.0, 1.9, 1.6, 1.7, 1.9], font_size=7.6, keep_together=True)
+      widths=[2.2, 2.7, 2.2, 2.1, 1.9, 2.0, 2.1], font_size=7.4, keep_together=True)
 body(doc,
      "稳健性方面，逐种子检查比只看均值更有意义。马氏距离在 5 个种子中有 4 个的召回 ≥0.85（0.933、1.000、0.933、0.933），"
      "仅在 seed=13 时降到 0.667，该种子的 FPR 仍为 1.5%、PR-AUC 0.840；排名融合在 5 个种子中有 4 个召回 ≥0.85，"
@@ -773,11 +780,12 @@ refs = [
 ]
 for i, ref in enumerate(refs, 1):
     p = doc.add_paragraph()
-    p.paragraph_format.line_spacing = 1.25
+    p.paragraph_format.line_spacing = 1.12
+    p.paragraph_format.space_after = Pt(2)
     p.paragraph_format.left_indent = Cm(0.74)
     p.paragraph_format.first_line_indent = Cm(-0.74)
     r = p.add_run(f"[{i}] {ref}")
-    set_run_font(r, "宋体", 10.5)
+    set_run_font(r, "宋体", 10)
 
 # ---------------- appendices
 doc.add_page_break()
@@ -806,8 +814,8 @@ body(doc,
      "以下片段取自成果包源码，行号与提交版本一致；完整代码、运行脚本与单元测试见 src/ 与 tests/，"
      "复现方式见 README.md。为便于排版，片段只保留核心逻辑，省略了类型注解与日志输出。")
 code_block(doc, "src/experiment.py", 29, 9, "代码 A-1  fit / calib / val / test 四划分与无泄漏断言")
-code_block(doc, "src/inject.py", 90, 16, "代码 A-2  三类异常的注入强度控制（点 / 协同 / 极端组合）")
-code_block(doc, "src/detectors.py", 189, 13, "代码 A-3  带 FPR 约束的阈值选择（只用 calib 正常样本与 val 合成异常）")
+code_block(doc, "src/inject.py", 92, 14, "代码 A-2  三类异常的注入强度")
+code_block(doc, "src/detectors.py", 197, 14, "代码 A-3  FPR 约束下的阈值选择")
 code_block(doc, "src/detectors.py", 40, 14, "代码 A-4  马氏距离检测器：MCD 稳健协方差估计")
 
 # ---------------- save

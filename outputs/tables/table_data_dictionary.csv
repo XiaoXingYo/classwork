@@ -1,20 +1,20 @@
 ﻿数据集,字段名,类型,取值范围/示例,缺失比例,含义说明
-iris_with_error,Sepal_Length,数值型（float64，cm）,4.3 ~ 7.9,0.66%,花萼长度
-iris_with_error,Sepal_Width,数值型（float64，cm）,2 ~ 4.2,1.97%,花萼宽度
-iris_with_error,Petal_Length,数值型（float64，cm）,1 ~ 6.9,2.63%,花瓣长度
-iris_with_error,Petal_Width,数值型（float64，cm）,0.1 ~ 2.5,2.63%,花瓣宽度
-iris_with_error,Species,类别型（字符串）,setosa、versicolor、virginica,0.66%,鸢尾花品种：setosa / versicolor / virginica
-housing,CRIM,数值型（float64）,0.00632 ~ 88.98,0.00%,城镇人均犯罪率
-housing,ZN,数值型（float64）,0 ~ 100,0.00%,住宅用地比例
-housing,INDUS,数值型（float64）,0.46 ~ 27.74,0.00%,非零售商业用地比例
-housing,CHAS,类别型（整数编码）,0 ~ 1,0.00%,是否临查尔斯河
-housing,NOX,数值型（float64）,0.385 ~ 0.871,0.00%,一氧化氮浓度
-housing,RM,数值型（float64）,3.561 ~ 8.78,0.00%,每户平均房间数
-housing,AGE,数值型（float64）,2.9 ~ 100,0.00%,1940年前建成房屋比例
-housing,DIS,数值型（float64）,1.13 ~ 12.13,0.00%,到就业中心加权距离
-housing,RAD,类别型（整数编码）,1 ~ 24,0.00%,高速公路可达性指数
-housing,TAX,数值型（float64）,187 ~ 711,0.00%,财产税率
-housing,PTRATIO,数值型（float64）,12.6 ~ 22,0.00%,师生比
-housing,B,数值型（float64）,0.32 ~ 396.9,0.00%,黑人比例变换值
-housing,LSTAT,数值型（float64）,1.73 ~ 37.97,0.00%,低收入人口比例
-housing,MEDV,数值型（float64）,5 ~ 50,0.00%,自住房屋中位价（千美元）
+iris_with_error,Sepal_Length,数值（cm）,4.3 ~ 7.9,0.66%,花萼长度
+iris_with_error,Sepal_Width,数值（cm）,2 ~ 4.2,1.97%,花萼宽度
+iris_with_error,Petal_Length,数值（cm）,1 ~ 6.9,2.63%,花瓣长度
+iris_with_error,Petal_Width,数值（cm）,0.1 ~ 2.5,2.63%,花瓣宽度
+iris_with_error,Species,类别,setosa、versicolor、virginica,0.66%,鸢尾花品种：setosa / versicolor / virginica
+housing,CRIM,数值,0.00632 ~ 88.98,0.00%,城镇人均犯罪率
+housing,ZN,数值,0 ~ 100,0.00%,住宅用地比例
+housing,INDUS,数值,0.46 ~ 27.74,0.00%,非零售商业用地比例
+housing,CHAS,类别编码,0 ~ 1,0.00%,是否临查尔斯河
+housing,NOX,数值,0.385 ~ 0.871,0.00%,一氧化氮浓度
+housing,RM,数值,3.561 ~ 8.78,0.00%,每户平均房间数
+housing,AGE,数值,2.9 ~ 100,0.00%,1940年前建成房屋比例
+housing,DIS,数值,1.13 ~ 12.13,0.00%,到就业中心加权距离
+housing,RAD,类别编码,1 ~ 24,0.00%,高速公路可达性指数
+housing,TAX,数值,187 ~ 711,0.00%,财产税率
+housing,PTRATIO,数值,12.6 ~ 22,0.00%,师生比
+housing,B,数值,0.32 ~ 396.9,0.00%,黑人比例变换值
+housing,LSTAT,数值,1.73 ~ 37.97,0.00%,低收入人口比例
+housing,MEDV,数值,5 ~ 50,0.00%,自住房屋中位价（千美元）

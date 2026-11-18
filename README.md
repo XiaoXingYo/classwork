@@ -30,9 +30,9 @@
 │  ├─ make_tables.py          # 报告附表与实验记录
 │  ├─ plots.py                # 14 幅 300 dpi 图
 │  ├─ report_builder.py       # 按模板生成 Word
-│  ├─ swat_adapter.py         # SWAT 流式适配器（扩展实验）
+│  ├─ make_git_stats.py       # 生成报告 9.3 节的提交统计
 │  └─ run_all.py              # 一键复现
-├─ tests/                     # pytest 单元测试（11 项）
+├─ tests/                     # pytest 单元测试（10 项）
 ├─ outputs/
 │  ├─ tables/                 # 结果 CSV
 │  ├─ figures/                # 报告图
@@ -75,24 +75,13 @@ python src/run_all.py
 - 特征贡献（马氏距离）：NOX 21.3%、TAX 13.7%、RM 12.8%、DIS 9.0%、CRIM 7.5%。
 - 小样本 iris：LOF/OCSVM 平均召回 0.95，但 FPR 分别 12.50%/9.50%，方差很大；说明小样本不能用单次划分下结论。
 
-## 5. SWAT 扩展
-
-主实验不使用 SWAT；`src/swat_adapter.py` 已实现流式读取、窗口统计特征、标签对齐与 --dry-run 自检：
-
-```powershell
-python src/swat_adapter.py --dry-run
-python src/swat_adapter.py --path "D:\path\to\swat" --window 60 --stride 30 --max-rows 500000
-```
-
-适配器按块读取 CSV，避免一次载入百 GB 数据；输出 `outputs/swat_features.parquet` 与 `outputs/tables/table_swat_performance.csv`。由于数据尚未提供，报告 6.7 节只写设计与复现方式，未填任何 SWAT 数值。
-
-## 6. 数据与合规
+## 5. 数据与合规
 
 - `housing.csv` 源自 Boston Housing 公开教学数据；`iris_with_error.csv` 源自经典 Iris 数据。两者不含个人身份信息，仅用于课程实训。
 - 原始数据未被手工修改；所有清洗、注入、划分、缩放均由代码完成。
 - 注入异常带完整清单（行号、类型、原值、注入值、种子），可逐条追溯。
 
-## 7. 说明
+## 6. 说明
 
 - 报告中的数值全部来自 `outputs/metrics.json` 与 `outputs/tables/*.csv`，由 `report_builder.py` 回填，未手工填写。
 - 单次运行的具体数值会随 scikit-learn 版本与随机种子略有差异；本成果包锁定 `requirements.txt` 中的版本。

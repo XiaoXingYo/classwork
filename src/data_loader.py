@@ -29,10 +29,10 @@ def data_dictionary() -> pd.DataFrame:
     for col in IRIS_FEATURES + [IRIS_LABEL]:
         s = iris[col]
         if col == IRIS_LABEL:
-            dtype = "类别型（字符串）"
+            dtype = "类别"
             meaning = "鸢尾花品种：setosa / versicolor / virginica"
         else:
-            dtype = "数值型（float64，cm）"
+            dtype = "数值（cm）"
             meaning = FEATURE_LABELS[col]
         rows.append({
             "数据集": "iris_with_error",
@@ -45,9 +45,9 @@ def data_dictionary() -> pd.DataFrame:
     housing = read_raw("housing.csv")
     for col in housing.columns:
         s = housing[col]
-        dtype = "整数型" if pd.api.types.is_integer_dtype(s) else "数值型（float64）"
+        dtype = "整数" if pd.api.types.is_integer_dtype(s) else "数值"
         if col in ("CHAS", "RAD"):
-            dtype = "类别型（整数编码）"
+            dtype = "类别编码"
         rows.append({
             "数据集": "housing",
             "字段名": col,
