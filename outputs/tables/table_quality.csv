@@ -1,0 +1,5 @@
+﻿问题类型,检出字段,数量/占比,处理方式,处理后样本量
+缺失值,iris：Sepal_Length 1、Sepal_Width 3、Petal_Length 4、Petal_Width 4、Species 1,13 格（1.71%）,按 Species 分组中位数插补；连续缺失≥3 个特征的 1 行整行删除,iris 145 行；housing 506 行
+重复值,iris：全部字段完全重复,5 行（3.29%）,保留首次出现，删除后续完全重复记录；housing 无重复,iris 145 行；housing 506 行
+异常值,iris：Sepal_Width 3；housing：13 个预测变量,iris IQR 标记 3 个；housing 字段级 IQR 标记 343 个,视为自然长尾，不删除；仅在建模前做稳健标准化。注入异常单独保留真值,iris 145 行；housing 506 行
+口径不一致,iris：Species 大小写/空白；housing：CHAS、RAD 为整数编码,0 条实质不一致；编码差异 2 个字段,Species 统一小写去空白；CHAS/RAD 保留编码并在数据字典中注明,iris 145 行；housing 506 行

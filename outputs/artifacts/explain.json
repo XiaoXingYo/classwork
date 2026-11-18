@@ -1,0 +1,256 @@
+{
+  "mahalanobis": [
+    {
+      "feature": "NOX",
+      "mean_contribution": 27.210420950929016,
+      "mean_share": 0.2125531667023706,
+      "method": "Mahalanobis"
+    },
+    {
+      "feature": "TAX",
+      "mean_contribution": 18.686706168783918,
+      "mean_share": 0.13707556413792057,
+      "method": "Mahalanobis"
+    },
+    {
+      "feature": "CRIM",
+      "mean_contribution": 10.939827213290862,
+      "mean_share": 0.07480996603460995,
+      "method": "Mahalanobis"
+    },
+    {
+      "feature": "RM",
+      "mean_contribution": 10.203825332384303,
+      "mean_share": 0.12786762883943908,
+      "method": "Mahalanobis"
+    },
+    {
+      "feature": "DIS",
+      "mean_contribution": 9.611971928411243,
+      "mean_share": 0.0898360177071405,
+      "method": "Mahalanobis"
+    },
+    {
+      "feature": "B",
+      "mean_contribution": 7.798042107108881,
+      "mean_share": 0.06799772185772975,
+      "method": "Mahalanobis"
+    },
+    {
+      "feature": "ZN",
+      "mean_contribution": 4.935942922929727,
+      "mean_share": 0.03636404435354034,
+      "method": "Mahalanobis"
+    },
+    {
+      "feature": "INDUS",
+      "mean_contribution": 4.407855224679138,
+      "mean_share": 0.06132401977086406,
+      "method": "Mahalanobis"
+    },
+    {
+      "feature": "LSTAT",
+      "mean_contribution": 4.38654414877911,
+      "mean_share": 0.04365345924306008,
+      "method": "Mahalanobis"
+    },
+    {
+      "feature": "CRIM_log",
+      "mean_contribution": 3.8812506056508123,
+      "mean_share": 0.045297282068695745,
+      "method": "Mahalanobis"
+    }
+  ],
+  "iforest": [
+    {
+      "feature": "B",
+      "mean_contribution": 0.02295158455787916,
+      "mean_share": 0.32682392155608414,
+      "method": "Isolation Forest"
+    },
+    {
+      "feature": "RM",
+      "mean_contribution": 0.012951370913915725,
+      "mean_share": 0.18442377348452998,
+      "method": "Isolation Forest"
+    },
+    {
+      "feature": "ZN",
+      "mean_contribution": 0.007937571213598185,
+      "mean_share": 0.11302871682418429,
+      "method": "Isolation Forest"
+    },
+    {
+      "feature": "LSTAT",
+      "mean_contribution": 0.005159154157509919,
+      "mean_share": 0.07346486206290823,
+      "method": "Isolation Forest"
+    },
+    {
+      "feature": "CRIM",
+      "mean_contribution": 0.004823514228718701,
+      "mean_share": 0.06868544661637459,
+      "method": "Isolation Forest"
+    },
+    {
+      "feature": "NOX",
+      "mean_contribution": 0.004605062539066925,
+      "mean_share": 0.0655747577790744,
+      "method": "Isolation Forest"
+    },
+    {
+      "feature": "CHAS",
+      "mean_contribution": 0.004380146461323844,
+      "mean_share": 0.06237201792624921,
+      "method": "Isolation Forest"
+    },
+    {
+      "feature": "TAX",
+      "mean_contribution": 0.003705066749164826,
+      "mean_share": 0.05275907820374883,
+      "method": "Isolation Forest"
+    },
+    {
+      "feature": "TAX_RAD",
+      "mean_contribution": 0.002101144972969748,
+      "mean_share": 0.029919696310818908,
+      "method": "Isolation Forest"
+    },
+    {
+      "feature": "INDUS",
+      "mean_contribution": 0.001611530592572057,
+      "mean_share": 0.022947729236027448,
+      "method": "Isolation Forest"
+    }
+  ],
+  "n_detected": 19,
+  "threshold": 6.279190840932827,
+  "errors": [
+    {
+      "row_position": 29,
+      "original_index": 29,
+      "label": 1,
+      "prediction": 0,
+      "error_type": "漏报(FN)",
+      "injection_type": "extreme",
+      "score": 5.826713448613969,
+      "threshold": 6.279190840932827,
+      "CRIM": 0.26838,
+      "ZN": 0.0,
+      "INDUS": 9.69,
+      "RM": 4.249823647531761,
+      "AGE": 70.6,
+      "DIS": 2.8927,
+      "TAX": 391.0,
+      "PTRATIO": 12.775147811532547,
+      "LSTAT": 14.1,
+      "MEDV": 18.3,
+      "margin": 0.4524773923188583
+    },
+    {
+      "row_position": 94,
+      "original_index": -1,
+      "label": 0,
+      "prediction": 1,
+      "error_type": "误报(FP)",
+      "injection_type": "normal",
+      "score": 7.181423210476278,
+      "threshold": 6.279190840932827,
+      "CRIM": 4.55587,
+      "ZN": 0.0,
+      "INDUS": 18.1,
+      "RM": 3.561,
+      "AGE": 87.9,
+      "DIS": 1.6132,
+      "TAX": 666.0,
+      "PTRATIO": 20.2,
+      "LSTAT": 7.12,
+      "MEDV": 27.5,
+      "margin": 0.9022323695434507
+    },
+    {
+      "row_position": 128,
+      "original_index": -1,
+      "label": 0,
+      "prediction": 1,
+      "error_type": "误报(FP)",
+      "injection_type": "normal",
+      "score": 6.794380910111555,
+      "threshold": 6.279190840932827,
+      "CRIM": 3.53501,
+      "ZN": 0.0,
+      "INDUS": 19.58,
+      "RM": 6.152,
+      "AGE": 82.6,
+      "DIS": 1.7455,
+      "TAX": 403.0,
+      "PTRATIO": 14.7,
+      "LSTAT": 15.02,
+      "MEDV": 15.6,
+      "margin": 0.5151900691787281
+    },
+    {
+      "row_position": 79,
+      "original_index": -1,
+      "label": 0,
+      "prediction": 1,
+      "error_type": "误报(FP)",
+      "injection_type": "normal",
+      "score": 6.498504051763791,
+      "threshold": 6.279190840932827,
+      "CRIM": 0.18337,
+      "ZN": 0.0,
+      "INDUS": 27.74,
+      "RM": 5.414,
+      "AGE": 98.3,
+      "DIS": 1.7554,
+      "TAX": 711.0,
+      "PTRATIO": 20.1,
+      "LSTAT": 23.97,
+      "MEDV": 7.0,
+      "margin": 0.2193132108309639
+    },
+    {
+      "row_position": 2,
+      "original_index": -1,
+      "label": 0,
+      "prediction": 1,
+      "error_type": "误报(FP)",
+      "injection_type": "normal",
+      "score": 6.48217259776609,
+      "threshold": 6.279190840932827,
+      "CRIM": 0.10574,
+      "ZN": 0.0,
+      "INDUS": 27.74,
+      "RM": 5.983,
+      "AGE": 98.8,
+      "DIS": 1.8681,
+      "TAX": 711.0,
+      "PTRATIO": 20.1,
+      "LSTAT": 18.07,
+      "MEDV": 13.6,
+      "margin": 0.20298175683326303
+    },
+    {
+      "row_position": 130,
+      "original_index": -1,
+      "label": 0,
+      "prediction": 1,
+      "error_type": "误报(FP)",
+      "injection_type": "normal",
+      "score": 6.327391765192328,
+      "threshold": 6.279190840932827,
+      "CRIM": 0.38735,
+      "ZN": 0.0,
+      "INDUS": 25.65,
+      "RM": 5.613,
+      "AGE": 95.6,
+      "DIS": 1.7572,
+      "TAX": 188.0,
+      "PTRATIO": 19.1,
+      "LSTAT": 27.26,
+      "MEDV": 15.7,
+      "margin": 0.04820092425950051
+    }
+  ]
+}

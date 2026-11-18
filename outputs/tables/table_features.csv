@@ -1,0 +1,16 @@
+﻿数据集,特征名,构造逻辑,业务/数据含义,是否入选
+housing,CRIM_log,log1p(CRIM),犯罪率长尾压缩,是
+housing,LSTAT_log,log1p(LSTAT),低收入比例长尾压缩,否（与 LSTAT 高度相关）
+housing,TAX_log,log1p(TAX),税率长尾压缩,否（与 TAX 高度相关）
+housing,RM2,RM²,房间数非线性项,否（与 RM 高度相关）
+housing,LSTAT_RM,LSTAT ÷ RM,低收入与房间数的交互,否（与 LSTAT 高度相关）
+housing,NOX_DIS,NOX × DIS,污染与区位距离的联合效应,否（相关性筛选）
+housing,TAX_RAD,TAX ÷ (RAD+1),税率与高速可达性的比值,是
+housing,AGE_LSTAT,AGE × LSTAT,房龄与低收入比例的交互,否（相关性筛选）
+housing,CRIM_LSTAT,CRIM × LSTAT,犯罪率与低收入比例的交互,否（相关性筛选）
+housing,PTRATIO_LSTAT,PTRATIO × LSTAT,师生比与低收入比例的交互,否（相关性筛选）
+iris,Petal_Area,Petal_Length × Petal_Width,花瓣面积，刻画花冠整体大小,是（与花瓣长度高度相关，被相关性筛选剔除）
+iris,Sepal_Area,Sepal_Length × Sepal_Width,花萼面积，刻画萼片整体大小,是
+iris,Petal_Aspect,Petal_Length ÷ Petal_Width,花瓣细长程度,是
+iris,Sepal_Aspect,Sepal_Length ÷ Sepal_Width,花萼细长程度,是
+iris,Petal_Sepal_Ratio,Petal_Length ÷ Sepal_Length,花瓣相对花萼的长度比例,否（与花瓣长度信息重叠）

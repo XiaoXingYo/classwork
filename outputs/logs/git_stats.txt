@@ -1,0 +1,9 @@
+﻿本地 Git 仓库：D:\life\研\项目\课程作业\13_程龙飞_实训成果
+截至报告生成，代码与结果共 5 次提交；含本报告提交共 6 次。
+主要提交记录：
+9f19259 (HEAD -> master) feat: add measured tables, figures and run logs
+5082497 feat: add report builder and measured result artefacts
+1b7e438 feat: add figures, SWAT streaming adapter and pytest suite
+2e6090d feat: add five detectors, leakage-safe evaluation and sensitivity analysis
+afebf58 chore: scaffold T13 project with audit, features and injection
+（未配置远程仓库；如需提交至学校/个人 Git 平台，可直接添加 remote 后 push。）

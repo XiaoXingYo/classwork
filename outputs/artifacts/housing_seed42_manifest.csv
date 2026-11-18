@@ -1,0 +1,16 @@
+﻿row_position,original_index,injection_type,n_features,features,original_values,injected_values,seed,tag,dataset,feature_mode
+12,12,point,1,RM,4.519,3.328,42,test,housing,engineered
+13,13,extreme,3,INDUS|DIS|ZN,12.83|5.0141|0,28.7912|9.43344|-0.496134,42,test,housing,engineered
+91,91,point,1,NOX,0.679,1.22141,42,test,housing,engineered
+114,114,extreme,4,RM|B|INDUS|NOX,7.163|372.08|6.2|0.504,4.32521|-25.0964|-1.61882|0.889868,42,test,housing,engineered
+29,29,extreme,2,RM|PTRATIO,5.794|19.2,4.24982|12.7751,42,test,housing,engineered
+109,109,point,1,RM,6.383,10.2237,42,test,housing,engineered
+143,143,multi,5,DIS|LSTAT|RM|ZN|AGE,3.665|23.98|5.404|0|88.6,-3.45467|34.3203|3.76376|81.879|154.57,42,test,housing,engineered
+110,110,point,1,DIS,1.9142,-6.79786,42,test,housing,engineered
+61,61,point,1,NOX,0.403,-0.131171,42,test,housing,engineered
+122,122,point,1,B,16.45,-60.1409,42,test,housing,engineered
+141,141,point,1,RM,6.345,10.0665,42,test,housing,engineered
+77,77,multi,5,PTRATIO|B|LSTAT|RM|NOX,14.7|392.78|3.81|7.853|0.4161,10.489|89.6145|33.4176|4.65722|0.208835,42,test,housing,engineered
+107,107,point,1,TAX,287,-457.329,42,test,housing,engineered
+101,101,point,1,NOX,0.437,1.06998,42,test,housing,engineered
+145,145,extreme,2,B|NOX,396.9|0.464,-38.7727|0.914302,42,test,housing,engineered

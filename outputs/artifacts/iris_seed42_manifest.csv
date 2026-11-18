@@ -1,0 +1,5 @@
+﻿row_position,original_index,injection_type,n_features,features,original_values,injected_values,seed,tag,dataset,feature_mode
+19,19,point,1,Petal_Length,5.8,13.3893,42,test,iris,engineered
+3,3,multi,4,Petal_Length|Sepal_Length|Petal_Width|Sepal_Width,1.7|5.4|0.2|3.4,-1.61732|9.09644|3.01765|1.70769,42,test,iris,engineered
+28,28,point,1,Petal_Width,2,5.00454,42,test,iris,engineered
+32,32,multi,4,Sepal_Length|Petal_Width|Petal_Length|Sepal_Width,6.3|1.8|4.9|2.7,8.00381|-0.195278|0.0505261|4.53226,42,test,iris,engineered
