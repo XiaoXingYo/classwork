@@ -18,7 +18,7 @@ count = int(git("rev-list", "--count", "HEAD"))
 log = git("--no-pager", "log", "--pretty=format:%ad  %s", "--date=short")
 
 text = "\n".join([
-    f"Git 仓库：{ROOT}（本地仓库，未配置远程地址）",
+    "Git 仓库：随包顶层目录 T13_程龙飞_实训成果/（本地仓库，未配置远程地址）",
     f"提交总数：{count} 次（含本报告所在提交）",
     "提交记录（日期  说明）：",
     log,

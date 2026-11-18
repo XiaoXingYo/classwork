@@ -87,7 +87,7 @@ def main():
          "结论/下一步": "自然极端房价样本是主要误报源；建议二次复核而非直接删除"},
         {"日期": "2026-11-18", "实验内容": "报告生成与成果打包",
          "参数设置": "python-docx 模板化生成；固定随机种子",
-         "结果": "Word 报告、14 幅图、结果表、ZIP 成果包",
+         "结果": "Word 报告（含附录 A 代码片段）、14 幅图、结果表、ZIP 成果包",
          "结论/下一步": "提交前复核字数、图表编号与数值一致性"},
     ]
     pd.DataFrame(log).to_csv(TABLE_DIR / "table_experiment_log.csv", index=False, encoding="utf-8-sig")
