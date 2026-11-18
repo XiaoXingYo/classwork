@@ -48,13 +48,15 @@ T13_程龙飞_实训成果/
 ## 3. 复现
 
 ```powershell
-cd "D:\life\研\项目\课程作业\13_程龙飞_实训成果"
+cd "T13_程龙飞_实训成果"
 python -m pip install -r requirements.txt
 python -m pytest -q
 python src/run_all.py
 ```
 
 `run_all.py` 会依次执行数据审计、主实验、附表、特征贡献、绘图与报告生成。完整运行约数分钟（CPU：AMD Ryzen 9 8945HX，16 核 32 线程）。
+
+报告由 `python-docx` 生成；`report/` 目录同时提供 Word 与由 Word 导出的 PDF（30 页）。
 
 > 报告使用 `python-docx` 生成；如需 PDF，可在 Word 中“另存为 PDF”。按本次交付约定，成果包不附 PDF。
 
