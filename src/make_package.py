@@ -3,9 +3,9 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC_DIR = ROOT.parent / "13_程龙飞_实训成果"
-TOP = "T13_程龙飞_实训成果"
-OUT = ROOT.parent / f"{TOP}.zip"
+SRC_DIR = ROOT
+TOP = SRC_DIR.name if SRC_DIR.name.startswith("T13_") else SRC_DIR.name.replace("13_", "T13_", 1)
+OUT = SRC_DIR.parent / f"{TOP}.zip"
 EXCLUDE = {".git", "__pycache__", ".pytest_cache", "preview"}
 
 with zipfile.ZipFile(OUT, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:

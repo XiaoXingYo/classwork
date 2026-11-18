@@ -799,9 +799,9 @@ table(doc, read_table("table_quality.csv"), "附表 2  数据质量检测结果"
 table(doc, read_table("table_features.csv"), "附表 3  派生特征清单",
       widths=[1.8, 2.4, 3.8, 4.4, 3.2], font_size=7.8)
 perf_all = perf_view(read_table("table_model_performance.csv"),
-                     with_dataset=True, with_params=False, with_time=False, with_roc=True)
+                     with_dataset=True, with_params=False, with_time=True, with_roc=True)
 table(doc, perf_all, "附表 4  模型性能对比",
-      widths=[1.4, 2.8, 2.2, 2.2, 2.0, 2.4, 2.2], font_size=7.8)
+      widths=[1.5, 2.5, 2.0, 1.9, 1.7, 1.7, 1.9, 2.0], font_size=7.6)
 table(doc, read_table("table_group.csv"), "附表 5  小组分工表",
       widths=[2.2, 2.6, 5.4, 4.0, 1.4], font_size=8.5)
 table(doc, read_table("table_experiment_log.csv"), "附表 6  实验记录表",
