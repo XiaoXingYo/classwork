@@ -51,6 +51,12 @@ def main():
     def mv(ds, method, key):
         return metrics[ds]["aggregate"][method][key]["mean"]
 
+    pcmp = pd.read_csv(TABLE_DIR / "table_param_compare.csv")
+
+    def pcp(method, setting):
+        row = pcmp[(pcmp["模型"] == method) & (pcmp["参数设置"] == setting)]
+        return float(row["测试 F1"].iloc[0]) if len(row) else float("nan")
+
     sens = pd.read_csv(TABLE_DIR / "table_sensitivity_summary.csv")
     sens_txt = "；".join(f"{r.method} {r.f1_range:.3f}" for r in sens.itertuples())
     contrib = pd.read_csv(TABLE_DIR / "table_feature_contrib.csv")
@@ -65,7 +71,7 @@ def main():
          "结果": "iris 152→145 行；housing 506 行；缺失 13 格（1.71%）、重复 5 行（3.29%）",
          "结论/下一步": "两份数据可用；housing 自然长尾保留，不当作错误"},
         {"日期": "2026-11-18", "实验内容": "主实验：5 类检测器 + 融合",
-         "参数设置": "housing 70/15/15 训练内划分 + 30% 测试；5 种子；测试注入 15 个异常（9.87%）",
+         "参数设置": "housing 70/15/15 训练内划分 + 30% 测试；5 种子；训练集内 3 折 CV 选参；测试注入 15 个异常（9.87%）",
          "结果": (f"Mahalanobis PR-AUC {mv('housing','Mahalanobis','pr_auc'):.4f}、"
                   f"Recall {mv('housing','Mahalanobis','recall'):.4f}、FPR {mv('housing','Mahalanobis','fpr'):.4f}；"
                   f"融合 Recall {mv('housing','Rank-Ensemble','recall'):.4f}、FPR {mv('housing','Rank-Ensemble','fpr'):.4f}"),
@@ -81,6 +87,13 @@ def main():
          "参数设置": "LOF k∈{5,10,15,20,30,50}；IForest max_samples；OCSVM nu×gamma；Mahalanobis support_fraction",
          "结果": f"F1 极差：{sens_txt}",
          "结论/下一步": "LOF 对 k 最敏感；报告需给出推荐参数区间而非单点"},
+        {"日期": "2026-11-18", "实验内容": "参数调优对照：默认 / 交叉验证最优 / 交叉验证最差",
+         "参数设置": "同一测试集、同一阈值规则；网格 5/6/18/35 组；3 折交叉验证",
+         "结果": (f"One-Class SVM 默认 {pcp('One-Class SVM','默认参数'):.4f} → 最优 "
+                  f"{pcp('One-Class SVM','交叉验证最优'):.4f}；马氏距离 {pcp('Mahalanobis','默认参数'):.4f} → "
+                  f"{pcp('Mahalanobis','交叉验证最优'):.4f}；Isolation Forest "
+                  f"{pcp('Isolation Forest','默认参数'):.4f} → {pcp('Isolation Forest','交叉验证最优'):.4f}"),
+         "结论/下一步": "调参收益依赖方法；参数选错方向的代价大于不调"},
         {"日期": "2026-11-18", "实验内容": "特征贡献与误差剖析",
          "参数设置": "seed=42；Mahalanobis 距离分解；IForest 特征替换",
          "结果": f"Mahalanobis 主要贡献 {top_mb_txt}；{err_n} 个错分案例",

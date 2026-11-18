@@ -11,7 +11,7 @@ from sklearn.neighbors import NearestNeighbors
 from config import OUT_DIR, TABLE_DIR
 from detectors import IForestDetector, MahalanobisDetector, build_detector, tune_detector
 from evaluation import binary_metrics
-from experiment import prepare_seed
+from experiment import _fold_matrices, prepare_seed
 from features import add_features, feature_columns, fit_scaler, select_features, transform
 
 ART = OUT_DIR / "artifacts"
@@ -20,8 +20,10 @@ ART = OUT_DIR / "artifacts"
 def _fit_best(dataset: str, seed: int = 42):
     p = prepare_seed(dataset, seed, "engineered")
     X = p["X"]
-    mb = tune_detector("Mahalanobis", X["fit"], X["cal"], X["val"], p["y_val"], dataset, seed)
-    rf = tune_detector("Isolation Forest", X["fit"], X["cal"], X["val"], p["y_val"], dataset, seed)
+    mb = tune_detector("Mahalanobis", X["fit"], X["cal"], X["val"], p["y_val"], dataset, seed,
+                       folds=_fold_matrices(p))
+    rf = tune_detector("Isolation Forest", X["fit"], X["cal"], X["val"], p["y_val"], dataset, seed,
+                       folds=_fold_matrices(p))
     return p, mb, rf
 
 

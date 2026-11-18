@@ -16,6 +16,7 @@ import seaborn as sns
 warnings.filterwarnings("ignore", message=".*glyph.*")
 warnings.filterwarnings("ignore", message=".*Font 'default'.*")
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
+from matplotlib.ticker import FuncFormatter
 from sklearn.decomposition import PCA
 from sklearn.metrics import (auc, average_precision_score, precision_recall_curve,
                              roc_curve)
@@ -49,8 +50,8 @@ def fig_route():
         (0.2, 2.6, "数据审计\n缺失/重复/长尾"), (2.05, 2.6, "清洗与划分\nfit/calib/val/test"),
         (3.9, 2.6, "受控异常注入\n点/协同/极端"), (5.75, 2.6, "特征工程\n派生+筛选+缩放"),
         (7.6, 2.6, "五类检测器\n统计/密度/树/边界"),
-        (2.05, 0.6, "阈值选择\nFPR≤10%"), (3.9, 0.6, "测试评估\nPR-AUC/Recall/FPR"),
-        (5.75, 0.6, "参数敏感性\n热图"), (7.6, 0.6, "特征贡献\n与误差剖析"),
+        (2.05, 0.6, "特征贡献\n与误差剖析"), (3.9, 0.6, "参数敏感性\n热图"),
+        (5.75, 0.6, "测试评估\nPR-AUC/Recall/FPR"), (7.6, 0.6, "阈值选择\nFPR≤10%"),
     ]
     for x, y, text in boxes:
         ax.add_patch(FancyBboxPatch((x, y), 1.55, 0.85, boxstyle="round,pad=0.05",
@@ -58,8 +59,8 @@ def fig_route():
         ax.text(x + 0.775, y + 0.425, text, ha="center", va="center", fontsize=9)
     arrows = [((1.75, 3.02), (2.05, 3.02)), ((3.6, 3.02), (3.9, 3.02)),
               ((5.45, 3.02), (5.75, 3.02)), ((7.35, 3.02), (7.6, 3.02)),
-              ((8.35, 2.6), (8.35, 1.45)), ((7.6, 1.02), (5.75, 1.02)),
-              ((5.45, 1.02), (3.9, 1.02)), ((3.6, 1.02), (2.82, 1.45))]
+              ((8.35, 2.6), (8.35, 1.45)), ((7.6, 1.02), (7.3, 1.02)),
+              ((5.75, 1.02), (5.45, 1.02)), ((3.9, 1.02), (3.6, 1.02))]
     for a, b in arrows:
         ax.add_patch(FancyArrowPatch(a, b, arrowstyle="-|>", mutation_scale=12,
                                      color="#2C3E50", lw=1.2))
@@ -282,10 +283,12 @@ def fig_runtime():
     fig, ax = plt.subplots(figsize=(8.5, 4.2))
     ax.barh(methods, vals, color="#8172B3")
     ax.set_xscale("log")
+    ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
     ax.set_xlabel("训练耗时（秒，对数坐标）")
     ax.set_title("housing：单次训练耗时对比")
     for i, v in enumerate(vals):
-        ax.text(v * 1.08, i, f"{v:.3f}s", va="center", fontsize=8)
+        label = f"{v * 1000:.2f} ms" if 0 < v < 0.01 else f"{v:.2f} s"
+        ax.text(v * 1.15, i, label, va="center", fontsize=8)
     fig.tight_layout(); save(fig, "fig13_runtime.png")
 
 
@@ -303,10 +306,29 @@ def fig_per_type():
     fig.tight_layout(); save(fig, "fig14_per_type_recall.png")
 
 
+def fig_param_compare():
+    raw = pd.read_csv(TABLE_DIR / "table_param_compare_raw.csv")
+    methods = ["Mahalanobis", "LOF", "Isolation Forest", "One-Class SVM"]
+    settings = ["默认参数", "交叉验证最优", "交叉验证最差"]
+    colors = ["#C44E52", "#55A868", "#8172B3"]
+    fig, axes = plt.subplots(1, 2, figsize=(13, 4.6), sharey=True)
+    x = np.arange(len(methods)); w = 0.26
+    for ax, key, title in zip(axes, ["cv_f1", "f1"],
+                              ["交叉验证 F1（参数选择的依据）", "测试集 F1（未参与任何选择）"]):
+        for i, s in enumerate(settings):
+            vals = [raw[(raw.method == m) & (raw.setting == s)][key].mean() for m in methods]
+            ax.bar(x + (i - 1) * w, vals, w, label=s, color=colors[i])
+        ax.set_xticks(x); ax.set_xticklabels(methods, rotation=12)
+        ax.set_title(title); ax.set_ylim(0, 1.0)
+    axes[0].set_ylabel("F1")
+    axes[1].legend(frameon=False, loc="upper right")
+    fig.tight_layout(); save(fig, "fig15_param_compare.png")
+
+
 def main():
     fig_route(); fig_eda(); fig_corr(); fig_pca(); fig_quality()
     fig_score_dist(); fig_pr_roc(); fig_recall_fpr(); fig_sensitivity()
-    fig_contrib(); fig_iris(); fig_runtime(); fig_per_type()
+    fig_contrib(); fig_iris(); fig_runtime(); fig_per_type(); fig_param_compare()
     print("all figures done")
 
 

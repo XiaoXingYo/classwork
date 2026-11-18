@@ -64,62 +64,62 @@
   "iforest": [
     {
       "feature": "B",
-      "mean_contribution": 0.02295158455787916,
-      "mean_share": 0.32682392155608414,
+      "mean_contribution": 0.027221770865594953,
+      "mean_share": 0.34572281033147667,
       "method": "Isolation Forest"
     },
     {
       "feature": "RM",
-      "mean_contribution": 0.012951370913915725,
-      "mean_share": 0.18442377348452998,
+      "mean_contribution": 0.014722119194500791,
+      "mean_share": 0.18697433194512153,
       "method": "Isolation Forest"
     },
     {
       "feature": "ZN",
-      "mean_contribution": 0.007937571213598185,
-      "mean_share": 0.11302871682418429,
-      "method": "Isolation Forest"
-    },
-    {
-      "feature": "LSTAT",
-      "mean_contribution": 0.005159154157509919,
-      "mean_share": 0.07346486206290823,
-      "method": "Isolation Forest"
-    },
-    {
-      "feature": "CRIM",
-      "mean_contribution": 0.004823514228718701,
-      "mean_share": 0.06868544661637459,
-      "method": "Isolation Forest"
-    },
-    {
-      "feature": "NOX",
-      "mean_contribution": 0.004605062539066925,
-      "mean_share": 0.0655747577790744,
-      "method": "Isolation Forest"
-    },
-    {
-      "feature": "CHAS",
-      "mean_contribution": 0.004380146461323844,
-      "mean_share": 0.06237201792624921,
-      "method": "Isolation Forest"
-    },
-    {
-      "feature": "TAX",
-      "mean_contribution": 0.003705066749164826,
-      "mean_share": 0.05275907820374883,
+      "mean_contribution": 0.009468621538692622,
+      "mean_share": 0.12025369196165331,
       "method": "Isolation Forest"
     },
     {
       "feature": "TAX_RAD",
-      "mean_contribution": 0.002101144972969748,
-      "mean_share": 0.029919696310818908,
+      "mean_contribution": 0.005070796180873755,
+      "mean_share": 0.06440028883225553,
+      "method": "Isolation Forest"
+    },
+    {
+      "feature": "CHAS",
+      "mean_contribution": 0.005008361160591843,
+      "mean_share": 0.06360734957854053,
+      "method": "Isolation Forest"
+    },
+    {
+      "feature": "LSTAT",
+      "mean_contribution": 0.004987814447183957,
+      "mean_share": 0.06334640154773377,
+      "method": "Isolation Forest"
+    },
+    {
+      "feature": "CRIM",
+      "mean_contribution": 0.004802792910022139,
+      "mean_share": 0.06099658506756206,
+      "method": "Isolation Forest"
+    },
+    {
+      "feature": "NOX",
+      "mean_contribution": 0.0024692061235860436,
+      "mean_share": 0.03135949106870131,
+      "method": "Isolation Forest"
+    },
+    {
+      "feature": "TAX",
+      "mean_contribution": 0.002241891291592328,
+      "mean_share": 0.028472539924526467,
       "method": "Isolation Forest"
     },
     {
       "feature": "INDUS",
-      "mean_contribution": 0.001611530592572057,
-      "mean_share": 0.022947729236027448,
+      "mean_contribution": 0.0017880881944725498,
+      "mean_share": 0.02270913522730789,
       "method": "Isolation Forest"
     }
   ],

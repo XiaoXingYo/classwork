@@ -39,6 +39,49 @@ def read_table(name: str) -> pd.DataFrame:
     return pd.read_csv(TABLE_DIR / name, encoding="utf-8-sig")
 
 
+def read_str_table(name: str) -> pd.DataFrame:
+    """Read a table that already holds pre-formatted numbers (keeps trailing zeros)."""
+    return pd.read_csv(TABLE_DIR / name, encoding="utf-8-sig", dtype=str)
+
+
+def pcv(method: str, setting: str, col: str = "测试 F1") -> float:
+    """Read one cell of the parameter-comparison table (housing)."""
+    df = read_table("table_param_compare.csv")
+    row = df[(df["模型"] == method) & (df["参数设置"] == setting)]
+    return float(row[col].iloc[0]) if len(row) else float("nan")
+
+
+def seed_values(dataset: str, method: str, key: str):
+    return [s["methods"][method][key] for s in METRICS[dataset]["per_seed"]]
+
+
+def cv_range(method: str, dataset: str = "housing") -> float:
+    """Mean spread of the cross-validated F1 over the whole parameter grid."""
+    vals = [v for v in seed_values(dataset, method, "cv_f1_range") if v is not None]
+    return float(sum(vals) / len(vals)) if vals else float("nan")
+
+
+def ptype_num(method: str, col: str) -> float:
+    df = read_table("table_per_type_housing.csv")
+    return float(pd.to_numeric(df[df["模型"] == method][col], errors="coerce").iloc[0])
+
+
+def contrib_top(method: str, k: int = 5) -> str:
+    df = read_table("table_feature_contrib.csv")
+    sub = df[df.method == method].sort_values("mean_share", ascending=False).head(k)
+    return "、".join(f"{r.feature} 占 {r.mean_share * 100:.1f}%" for r in sub.itertuples())
+
+
+def gap_span(group: str):
+    """Min/max of (test F1 - CV F1) for the given comparison group."""
+    raw = read_table("table_param_compare_raw.csv")
+    tuned = raw[raw["setting"].isin(["默认参数", "交叉验证最优", "交叉验证最差"])]
+    sub = tuned[tuned["setting"] == "交叉验证最优"] if group == "交叉验证最优" else \
+        tuned[tuned["setting"] != "交叉验证最优"]
+    gap = (sub["f1"] - sub["cv_f1"]).dropna()
+    return float(gap.min()), float(gap.max())
+
+
 def compact_metric(value) -> str:
     s = str(value)
     def repl(m):
@@ -299,6 +342,10 @@ abstract = (
     f"Recall {f4(agg('housing','Mahalanobis','recall'))}、FPR {f4(agg('housing','Mahalanobis','fpr'))}，"
     "满足召回≥0.85 且误报≤10% 的达标线；五模型排名融合将 Recall 提升至 "
     f"{f4(agg('housing','Rank-Ensemble','recall'))}，但精确率降至 {f4(agg('housing','Rank-Ensemble','precision'))}。"
+    "超参数在训练集内部用 3 折交叉验证选取，测试集不参与；One-Class SVM 由默认 nu=0.5 调到 nu=0.01 后 F1 提高 "
+    f"{pcv('One-Class SVM','交叉验证最优') - pcv('One-Class SVM','默认参数'):.2f}，马氏距离的默认值恰好已是最优，"
+    f"而参数取到网格最差端会使 F1 下降 {pcv('Mahalanobis','交叉验证最优') - pcv('Mahalanobis','交叉验证最差'):.2f}"
+    f"（马氏距离）与 {pcv('One-Class SVM','交叉验证最优') - pcv('One-Class SVM','交叉验证最差'):.2f}（One-Class SVM）。"
     "参数敏感性显示 LOF 的 F1 极差达 0.566，马氏距离为 0.455；特征贡献显示 NOX、TAX、RM 与 CRIM 是主要驱动因素，"
     "极端组合异常仍是主要漏报来源；iris 小样本的 FPR 方差显著增大。研究说明：在低维、近似椭球分布的数据上，"
     "统计距离方法优于树模型与密度方法，阈值校准与误报复核比盲目追求复杂模型更重要。上述结果对同类低维表格数据的异常检测具有参考价值，"
@@ -485,16 +532,36 @@ body(doc,
      "而是与原始变量高度共线；在树模型之外，共线会让距离度量重复计权，因此优先保留解释性更强的原始字段。")
 
 heading(doc, "5.4 特征有效性验证", 2)
+gain = read_table("table_feature_gain.csv")
+gain["_prauc"] = pd.to_numeric(gain["PR-AUC"], errors="coerce")
+gain["_recall"] = pd.to_numeric(gain["Recall"], errors="coerce")
+gain["_f1"] = pd.to_numeric(gain["F1"], errors="coerce")
+gain["_fpr"] = pd.to_numeric(gain["FPR"], errors="coerce")
+
+
+def gain_row(name: str, key: str) -> float:
+    return float(gain[gain["特征集"] == name][key].iloc[0])
+
+
+base_prauc, eng_prauc = gain_row("基础特征", "_prauc"), gain_row("工程特征", "_prauc")
+base_fpr, eng_fpr = gain_row("基础特征", "_fpr"), gain_row("工程特征", "_fpr")
+base_rec, eng_rec = gain_row("基础特征", "_recall"), gain_row("工程特征", "_recall")
+base_f1, eng_f1 = gain_row("基础特征", "_f1"), gain_row("工程特征", "_f1")
 body(doc,
      "以 Isolation Forest 为固定载体、seed=42，比较基础特征与工程特征的测试表现，结果见表 5-2。加入派生特征后，"
-     "PR-AUC 从 0.6229 提升到 0.6388，Recall 从 0.6667 提升到 0.7333，F1 从 0.5714 提升到 0.6286，FPR 从 7.30% 降到 6.57%。"
-     "此处为单种子对照，数值与表 6-2 的 5 种子均值（0.5089）不同属正常现象，不应混用。逐特征剔除实验显示，CRIM_log 的"
-     "边际贡献为 +0.0131，TAX_RAD 的边际贡献为 -0.0075：前者压缩了犯罪率长尾，后者虽然对 IForest 略有害，但在马氏距离中"
-     "提供了税率与可达性的比值信息，故在最终特征集中保留并在敏感性分析中讨论。")
-gain = read_table("table_feature_gain.csv")
+     f"PR-AUC 从 {base_prauc:.4f} 提升到 {eng_prauc:.4f}，FPR 从 {pct(base_fpr)} 降到 {pct(eng_fpr)}；"
+     f"阈值化的 Recall 与 F1 则从 {base_rec:.4f}/{base_f1:.4f} 变为 {eng_rec:.4f}/{eng_f1:.4f}，"
+     "原因是派生特征改变了得分分布，在同样的 calib 分位约束下阈值被推得更严。也就是说，特征工程的收益主要体现在"
+     "排序质量与误报控制上，而不是在同一条阈值下提高召回；这也再次说明阈值指标不能单独用来评价特征集。"
+     f"此处为单种子对照，数值与表 6-2 的 5 种子均值（{f4(agg('housing','Isolation Forest','pr_auc'))}）不同属正常现象，"
+     "不应混用。逐特征剔除实验显示，CRIM_log 与 TAX_RAD 的边际贡献分别为 "
+     f"{eng_prauc - gain_row('去掉 CRIM_log', '_prauc'):+.4f} 与 "
+     f"{eng_prauc - gain_row('去掉 TAX_RAD', '_prauc'):+.4f}：前者压缩了犯罪率长尾，后者给出了税率与可达性的比值，"
+     "两者对排序质量都是正向的，故在最终特征集中保留。")
 for c in ["PR-AUC", "Recall", "F1", "FPR"]:
-    gain[c] = pd.to_numeric(gain[c], errors="coerce").round(4)
-table(doc, gain, "表 5-2  特征工程增益（Isolation Forest，seed=42）", widths=[3.0, 1.6, 2.2, 2.2, 2.0, 2.0, 3.6], font_size=8.5,
+    gain[c] = pd.to_numeric(gain[c], errors="coerce").map(lambda v: f"{v:.4f}")
+table(doc, gain[["特征集", "特征数", "PR-AUC", "Recall", "F1", "FPR", "说明"]],
+      "表 5-2  特征工程增益（Isolation Forest，seed=42）", widths=[3.0, 1.6, 2.2, 2.2, 2.0, 2.0, 3.6], font_size=8.5,
       keep_together=True)
 
 # ---------------- 6
@@ -514,9 +581,9 @@ body(doc,
 
 heading(doc, "6.3 对比模型", 2)
 body(doc,
-     "（1）马氏距离：用稳健协方差（MCD）估计均值与协方差，得分 d(x)=sqrt((x-μ)^T Σ^{-1}(x-μ))。它把特征相关性与尺度"
-     "同时纳入，理论上适合近似椭球分布的数据；MCD 通过最小化协方差行列式降低异常点对估计的污染[8]。参数为 support_fraction，"
-     "网格取 0.5、0.6、0.75、0.9、1.0。")
+     "（1）马氏距离：用协方差矩阵估计均值与协方差，得分 d(x)=sqrt((x-μ)^T Σ^{-1}(x-μ))。它把特征相关性与尺度"
+     "同时纳入，理论上适合近似椭球分布的数据；support_fraction=1 等价于全量协方差，小于 1 时改用 MCD 的稳健估计，"
+     "用最小化协方差行列式的方式降低异常点对估计的污染[8]。参数网格取 0.5、0.6、0.75、0.9、1.0。")
 body(doc,
      "（2）LOF：对每个样本比较其局部可达密度与邻居密度，得分越高越孤立[3]。它能发现局部异常，但在高维或密度不均时"
      "容易退化；参数为邻居数 k，housing 取 5–50，iris 取 3–20。")
@@ -525,7 +592,8 @@ body(doc,
      "max_samples 与 max_features；本文树数取 100/200/300，max_samples 取 0.5/0.75/1.0，max_features 取 0.5/1.0。")
 body(doc,
      "（4）One-Class SVM：在核空间中寻找包围正常样本的最小边界[6,7]。参数为 nu（边界外样本比例上界）与 RBF 核的 gamma；"
-     "nu 取 0.01–0.3，gamma 取 scale 与 0.01/0.05/0.1/0.5。")
+     "nu 取 0.01、0.05、0.1、0.2、0.3、0.5、0.7（含 scikit-learn 默认值 0.5，用于检验默认参数是否够用），"
+     "gamma 取 scale 与 0.01/0.05/0.1/0.5，合计 35 组。")
 body(doc,
      "（5）排名融合：把五个基模型的得分在 calib 上做 z-score 标准化后等权平均。它不是新的基学习器，而是检验"
      "“不同归纳偏置是否互补”的对照；若融合的召回明显高于单模型，说明不同方法捕捉到了不同类型的异常。")
@@ -534,11 +602,21 @@ heading(doc, "6.4 实验设置", 2)
 body(doc,
      "实验环境为 AMD Ryzen 9 8945HX（16 核 32 线程）、15.2 GB 内存、Windows；Python 3.13.9、NumPy 2.3.5、"
      "pandas 2.3.3、scikit-learn 1.7.2、Matplotlib 3.10.6，全部模型实现基于 scikit-learn 与 NumPy[17,18]，"
-     "绘图基于 Matplotlib[19]。所有模型使用固定 random_state；阈值只在 calib 正常样本与 val "
-     "合成异常上选择，约束 calib FPR≤10%，目标为最大化 val F1；测试集不参与任何选择。参数网格与划分见表 6-1。")
+     "绘图基于 Matplotlib[19]。所有模型使用固定 random_state；超参数在训练集内部用 3 折交叉验证选择，"
+     "阈值只在 calib 正常样本与 val 合成异常上确定，约束 calib FPR≤10%，目标为最大化 val F1；测试集不参与任何选择。"
+     "参数网格与划分见表 6-1。")
+body(doc,
+     "三折由训练集内部的正常样本划分而来：每折用约 2/3 的正常样本拟合模型，其中 1/4 作为折内校准集确定阈值，"
+     "其余正常样本加上该折独立注入的合成异常作为折内评估集（housing 每折 8 个、iris 每折 4 个）。三折的评估样本"
+     "恰好覆盖全部正常训练样本，且每次参数选择只用到训练集内部的样本与标签；折内标准化参数重新估计，特征列沿用"
+     "第 5 节在校验阶段确定的结果。参数选择按折内 F1 均值排序，同时记录网格内的最大–最小值之差，"
+     "作为“该方法的性能对参数有多敏感”的度量，这一度量同样不接触测试集。")
 settings = pd.DataFrame([
     {"项目": "训练/校准/验证/测试", "设置": "housing 247/53/54/152；iris 70/15/16/44"},
     {"项目": "随机种子", "设置": "housing 5 个；iris 10 个；所有模型固定 random_state"},
+    {"项目": "参数选择", "设置": "训练集内 3 折交叉验证，按折内 F1 均值排序取最优"},
+    {"项目": "交叉验证折", "设置": "housing 83/82/82（各含 8 个合成异常）；iris 24/23/23（各含 4 个）"},
+    {"项目": "候选网格规模", "设置": "马氏距离 5 组；LOF 6 组；Isolation Forest 18 组；One-Class SVM 35 组"},
     {"项目": "注入类型", "设置": "点异常 40%、协同异常 40%、极端组合 20%（按行随机）"},
     {"项目": "阈值约束", "设置": "calib FPR≤0.10，最大化 val F1；测试集不调阈值"},
     {"项目": "评价指标", "设置": "PR-AUC（主）、Recall、FPR、Precision、F1、ROC-AUC、训练耗时"},
@@ -565,15 +643,24 @@ perf_h = perf[perf["数据集"] == "housing"]
 perf_h = perf_view(perf_h, with_dataset=False, with_params=True, with_time=False, with_roc=True)
 table(doc, perf_h, "表 6-2  housing 模型性能对比（5 种子均值±标准差）",
       widths=[2.2, 2.7, 2.2, 2.1, 1.9, 2.0, 2.1], font_size=7.4, keep_together=True)
+mb_rec = seed_values("housing", "Mahalanobis", "recall")
+ens_rec = seed_values("housing", "Rank-Ensemble", "recall")
+mb_ok = sum(1 for r in mb_rec if r >= 0.85)
+ens_ok = sum(1 for r in ens_rec if r >= 0.85)
 body(doc,
-     "稳健性方面，逐种子检查比只看均值更有意义。马氏距离在 5 个种子中有 4 个的召回 ≥0.85（0.933、1.000、0.933、0.933），"
-     "仅在 seed=13 时降到 0.667，该种子的 FPR 仍为 1.5%、PR-AUC 0.840；排名融合在 5 个种子中有 4 个召回 ≥0.85，"
-     "最低为 0.733。也就是说，达标线在多数划分下成立，但个别划分下会失守，报告时应同时给出均值、标准差与逐种子明细，"
-     "而不是只报一个均值。")
+     f"稳健性方面，逐种子检查比只看均值更有意义。马氏距离在 {len(mb_rec)} 个种子中有 {mb_ok} 个的召回 ≥0.85"
+     f"（{'、'.join(f'{r:.3f}' for r in mb_rec)}），最低为 {min(mb_rec):.3f}；排名融合有 {ens_ok} 个种子召回 ≥0.85，"
+     f"最低为 {min(ens_rec):.3f}。也就是说，达标线在多数划分下成立，但个别划分下会失守，报告时应同时给出均值、"
+     "标准差与逐种子明细，而不是只报一个均值。")
 body(doc,
      "各方法的异常得分分布、PR 曲线、ROC 曲线与 5 个种子的波动分别见图 6-2、图 6-3、图 6-4 与图 6-5；"
-     "单次训练耗时对比见图 6-7。马氏距离与 One-Class SVM 的训练耗时均在毫秒级，LOF 与 Isolation Forest 约 0.3–0.4 s，"
-     "融合模型约 0.7 s；对 506 条样本的离线审计而言差异可以接受，但在高频在线场景需优先考虑轻量模型。")
+     f"单次训练耗时对比见图 6-7。马氏距离、LOF 与 One-Class SVM 的拟合耗时都在 3 毫秒以内"
+     f"（{agg('housing','Mahalanobis','fit_seconds') * 1000:.2f}、{agg('housing','LOF','fit_seconds') * 1000:.2f}、"
+     f"{agg('housing','One-Class SVM','fit_seconds') * 1000:.2f} ms），Isolation Forest 约 "
+     f"{agg('housing','Isolation Forest','fit_seconds'):.2f} s，融合模型约 "
+     f"{agg('housing','Rank-Ensemble','fit_seconds'):.2f} s（等于五个基模型之和）。需要说明的是，表中耗时只计最终"
+     "重拟合，未包含交叉验证的参数搜索开销。对 506 条样本的离线审计而言这些差异可以接受，但在高频在线场景需优先"
+     "考虑轻量模型。")
 figure(doc, "fig06_score_distributions.png", "图 6-2  各方法在 housing 上的异常得分分布（seed=42）", 15.2)
 figure(doc, "fig07_pr_curves.png", "图 6-3  housing 的 Precision-Recall 曲线（seed=42）", 12.6)
 figure(doc, "fig08_roc_curves.png", "图 6-4  housing 的 ROC 曲线（seed=42）", 12.6)
@@ -584,14 +671,18 @@ figure(doc, "fig14_per_type_recall.png", "图 6-8  housing 分异常类型的召
 figure(doc, "fig12_iris.png", "图 6-9  iris 小样本对照：Recall、FPR 与 PR-AUC（10 种子）", 15.4)
 
 body(doc,
-     "分类型结果见表 6-3 与图 6-8。Z-Score 对点异常的召回为 1.00，但对协同异常只有 0.49、对极端组合只有 0.28，"
-     "说明“单字段越界”规则无法覆盖多字段共同偏移；马氏距离对协同异常召回 1.00，但对极端组合仅 0.63；"
-     "Isolation Forest 对点异常只有 0.28，却对协同异常达到 0.71；融合模型在三种类型上分别为 0.92、0.95、0.92，"
+     f"分类型结果见表 6-3 与图 6-8。Z-Score 对点异常的召回为 {ptype_num('Z-Score','点异常'):.2f}，但对协同异常只有 "
+     f"{ptype_num('Z-Score','协同异常'):.2f}、对极端组合只有 {ptype_num('Z-Score','极端组合'):.2f}，"
+     f"说明“单字段越界”规则无法覆盖多字段共同偏移；马氏距离对协同异常召回 {ptype_num('Mahalanobis','协同异常'):.2f}，"
+     f"但对极端组合仅 {ptype_num('Mahalanobis','极端组合'):.2f}；Isolation Forest 对点异常只有 "
+     f"{ptype_num('Isolation Forest','点异常'):.2f}，却对协同异常达到 {ptype_num('Isolation Forest','协同异常'):.2f}；"
+     f"融合模型在三种类型上分别为 {ptype_num('Rank-Ensemble','点异常'):.2f}、"
+     f"{ptype_num('Rank-Ensemble','协同异常'):.2f}、{ptype_num('Rank-Ensemble','极端组合'):.2f}，"
      "是唯一在极端组合上超过 0.90 的方案。这一结果说明不同方法的归纳偏置确实互补：Z-Score 擅长单点越界，"
      "马氏距离擅长相关变量整体偏移，树模型擅长不规则边界，融合可以覆盖更多类型。")
 ptype = read_table("table_per_type_housing.csv")
 for c in ["点异常", "协同异常", "极端组合"]:
-    ptype[c] = pd.to_numeric(ptype[c], errors="coerce").round(3)
+    ptype[c] = pd.to_numeric(ptype[c], errors="coerce").map(lambda v: f"{v:.3f}")
 table(doc, ptype, "表 6-3  housing 分异常类型召回率", widths=[4.0, 3.8, 3.8, 3.8], font_size=9,
       keep_together=True)
 
@@ -599,7 +690,7 @@ body(doc,
      "为了观察错分来源，表 6-4 列出 seed=42 下马氏距离的 6 个错分案例（1 个漏报、5 个误报）。漏报样本属于极端组合异常，"
      "得分为 5.827，低于阈值 6.279；其 RM 被压到 4.25、CRIM 仅 0.268、LSTAT 为 14.1，虽然组合罕见，但马氏距离仍认为它"
      "落在正常椭球的可接受范围内。5 个误报均为正常样本，特征是“低房间数/高犯罪率/极高税率”等自然长尾组合，"
-     "其中 4 个的得分只比阈值高 0.05–0.90。它们不是数据错误，而是业务上值得复核的边界样本；这提示我们不应把误报简单"
+     "其中 5 个的得分只比阈值高 0.05–0.90。它们不是数据错误，而是业务上值得复核的边界样本；这提示我们不应把误报简单"
      "视为模型失败，而应结合复核成本决定阈值。")
 err = read_table("table_error_cases.csv")
 cols = ["error_type", "injection_type", "score", "threshold", "CRIM", "RM", "TAX", "LSTAT", "MEDV"]
@@ -616,53 +707,105 @@ heading(doc, "6.6 结果分析", 2)
 body(doc,
      "第一，马氏距离的优势来自数据分布与异常机制匹配。housing 的 13 个预测变量存在明显相关（RAD-TAX、NOX-INDUS/DIS），"
      "注入的协同异常又是在相关方向上整体偏移；马氏距离用协方差逆矩阵做白化，能把“整体偏移”转化为较大的马氏半径。"
-     "MCD 的稳健估计进一步降低了少量极端值对协方差的影响，因此它在 5 个种子上保持较高召回与很低误报。")
+     "值得注意的是，交叉验证在 5 个种子上都选出 support_fraction=1.0，即不做 MCD 削减、直接用全量协方差：训练集已在"
+     "清洗阶段剔除异常，MCD 的子集选择在这个样本量上只会引入额外方差。但若把 support_fraction 误设成 0.5，测试 F1 会从 "
+     f"{pcv('Mahalanobis','交叉验证最优'):.4f} 掉到 {pcv('Mahalanobis','交叉验证最差'):.4f}（表 6-5），"
+     "可见“稳健化”并非无条件有益，参数方向必须由数据决定。")
 body(doc,
      "第二，Isolation Forest 的失利不是实现问题，而是归纳偏置不匹配。孤立森林依赖轴对齐的随机切分，当异常表现为多个"
-     "相关特征的联合偏移时，单次切分只看到一个维度，需要更多树才能“碰巧”孤立；本文为控制耗时将 max_features 设为 0.5，"
-     "进一步加剧了维度稀释。它的 PR-AUC 只有 0.5089，且在点异常上的召回仅 0.28，说明树模型并非在任何表格数据上都占优。")
+     "相关特征的联合偏移时，单次切分只看到一个维度，需要更多树才能“碰巧”孤立。交叉验证在 18 组参数上搜索后给出的"
+     f"最优设置，测试 PR-AUC 只有 {f4(agg('housing','Isolation Forest','pr_auc'))}，点异常召回仅 "
+     f"{ptype_num('Isolation Forest','点异常'):.2f}；而它的折内 F1 极差只有 "
+     f"{cv_range('Isolation Forest'):.2f}，是四种可调方法里最小的（附表 7），说明它的瓶颈不在参数而在打分机制本身——"
+     "增加树数、放开特征采样都无法弥补轴对齐切分与相关偏移之间的错配。这也解释了为什么调参对它几乎没有正向收益"
+     f"（默认 {pcv('Isolation Forest','默认参数'):.4f} vs 交叉验证最优 {pcv('Isolation Forest','交叉验证最优'):.4f}）。")
 body(doc,
      "第三，LOF 的 FPR 很低但召回不足。LOF 比较局部密度，对于远离正常云团的点异常很敏感；但当协同异常落在正常样本的"
      "稀疏边缘时，其局部密度未必显著低于邻居，因此召回偏低。LOF 对 k 也非常敏感：图 6-6 显示 k=5 时 F1 可达 0.84，"
      "k=30 且阈值分位 0.99 时降到 0.27，极差 0.566，是五种方法中最大的。")
 body(doc,
-     "第四，One-Class SVM 与融合模型体现“召回优先”的取舍。OCSVM 通过 nu 控制边界外样本比例，在 nu=0.01、gamma=0.05 时"
-     "取得较高召回，但精确率只有 0.6967；融合模型把五个模型的得分标准化后平均，等价于让不同归纳偏置投票，"
-     "召回提升到 0.9200，但精确率降到 0.7237。若业务更怕漏报，融合是合理选择；若复核成本很高，马氏距离更均衡。")
+     "第四，One-Class SVM 与融合模型体现“召回优先”的取舍。OCSVM 通过 nu 控制边界外样本比例，是本次实验中对参数最敏感"
+     f"的方法：沿用 scikit-learn 默认的 nu=0.5 时测试 F1 只有 {pcv('One-Class SVM','默认参数'):.4f}，"
+     f"交叉验证把 nu 调到 0.01 后升到 {pcv('One-Class SVM','交叉验证最优'):.4f}，召回率 "
+     f"{f4(agg('housing','One-Class SVM','recall'))}、精确率 {f4(agg('housing','One-Class SVM','precision'))}；"
+     f"融合模型把五个模型的得分标准化后平均，等价于让不同归纳偏置投票，召回提升到 "
+     f"{f4(agg('housing','Rank-Ensemble','recall'))}，但精确率降到 {f4(agg('housing','Rank-Ensemble','precision'))}。"
+     "若业务更怕漏报，融合是合理选择；若复核成本很高，马氏距离更均衡。")
 body(doc,
-     "第五，Z-Score 的 FPR 在种子上波动很大（均值 9.05%，最高 11.68%）。原因是单变量最大值对偏态特征敏感，"
+     f"第五，Z-Score 的 FPR 在种子上波动很大（均值 {pct(agg('housing','Z-Score','fpr'))}，最高 "
+     f"{pct(max(seed_values('housing','Z-Score','fpr')))}）。原因是单变量最大值对偏态特征敏感，"
      "calib 上的 10% 分位阈值在测试集上不一定保持同样的误报率；这也说明“在训练集上卡 10%”不等于“在测试集上保证 10%”，"
      "阈值需要留出安全裕度或做在线校准。")
 body(doc,
-     "第六，iris 小样本结果（图 6-9）显示 FPR 的方差远大于 housing：LOF 与 OCSVM 的平均召回均为 0.95，但 FPR 分别为"
-     "12.50% 与 9.50%，且标准差很大；马氏距离的 FPR 为 9.50%，召回只有 0.775。145 条样本、44 条测试、4 个异常的条件下，"
-     "单个样本的判定就会让 FPR 跳动 2–3 个百分点，因此不能用单次划分给小样本方法下结论。本文保留这一负面结果，"
-     "并将其作为“小样本异常检测需要重复划分与置信区间”的证据。")
+     f"第六，iris 小样本结果（图 6-9）显示 FPR 的方差远大于 housing：LOF 与 OCSVM 的平均召回分别为 "
+     f"{f4(agg('iris','LOF','recall'))} 与 {f4(agg('iris','One-Class SVM','recall'))}，但 FPR 分别为 "
+     f"{pct(agg('iris','LOF','fpr'))} 与 {pct(agg('iris','One-Class SVM','fpr'))}；马氏距离的 FPR 为 "
+     f"{pct(agg('iris','Mahalanobis','fpr'))}，召回只有 {f4(agg('iris','Mahalanobis','recall'))}。145 条样本、"
+     "44 条测试、4 个异常的条件下，单个样本的判定就会让 FPR 跳动 2–3 个百分点，因此不能用单次划分给小样本方法下结论。"
+     "本文保留这一负面结果，并将其作为“小样本异常检测需要重复划分与置信区间”的证据。")
+
+heading(doc, "6.7 参数调优的必要性与代价", 2)
+body(doc,
+     "为了回答“不调参到底行不行”，本文额外做了一组对照：同一份数据、同一套阈值规则、同一个测试集，只把超参数换成"
+     "三种取值——scikit-learn 的默认值、交叉验证选出的最优值、以及交叉验证排名最差的网格点。结果见表 6-5 与图 6-10。"
+     "结论并不是“调参一定更好”，而是“参数重不重要取决于方法”。")
+figure(doc, "fig15_param_compare.png",
+       "图 6-10  参数设置对 F1 的影响：交叉验证（左）与测试集（右）", 15.0)
+body(doc,
+     f"对 One-Class SVM，默认 nu=0.5 严重高估了异常比例，测试 F1 只有 {pcv('One-Class SVM','默认参数'):.4f}，"
+     f"调到 nu=0.01 附近的低值后达到 {pcv('One-Class SVM','交叉验证最优'):.4f}，提升 "
+     f"{pcv('One-Class SVM','交叉验证最优') - pcv('One-Class SVM','默认参数'):.2f}，是本组实验里调参收益最大的一项。"
+     f"对马氏距离，默认的全量协方差恰好就是交叉验证选出的最优点，调参收益为 0；但网格另一端（support_fraction=0.5）"
+     f"只拿到 {pcv('Mahalanobis','交叉验证最差'):.4f}，与最优值相差 "
+     f"{pcv('Mahalanobis','交叉验证最优') - pcv('Mahalanobis','交叉验证最差'):.2f}，说明“不作选择”与“选错”是两回事。"
+     f"对 LOF，默认 k=20 得到 {pcv('LOF','默认参数'):.4f}，最优 k=5 为 {pcv('LOF','交叉验证最优'):.4f}，收益 "
+     f"{pcv('LOF','交叉验证最优') - pcv('LOF','默认参数'):.2f}，属于中等；而 k=50 只有 "
+     f"{pcv('LOF','交叉验证最差'):.4f}，说明邻居数取大时局部密度被过度平滑。"
+     f"对 Isolation Forest，交叉验证选出的参数在测试集上反而比默认值低 "
+     f"{pcv('Isolation Forest','默认参数') - pcv('Isolation Forest','交叉验证最优'):.2f}，"
+     "是本组唯一出现负收益的方法——它的参数曲面对目标函数几乎是平的，交叉验证在小折上的排序噪声盖过了真实差异。")
+body(doc,
+     "这组对照还暴露了交叉验证在小样本上的代价。折内训练样本只有约 123 条（housing），模型能力弱于最终模型，"
+     "折内 F1 与测试 F1 的差值并不稳定：在“交叉验证最优”一行为 "
+     f"{gap_span('交叉验证最优')[0]:+.3f}～{gap_span('交叉验证最优')[1]:+.3f}，在“默认参数/交叉验证最差”两行为 "
+     f"{gap_span('other')[0]:+.3f}～{gap_span('other')[1]:+.3f}，跨度接近 0.6。也就是说，折内评估只能用来给候选参数"
+     "排序，不能当作性能预估；真正的性能仍必须由独立的测试集给出。另一个代价是排序噪声：当参数曲面的起伏小于折间波动时，"
+     "交叉验证会“选中噪声”，Isolation Forest 的 5 个种子选出了 5 组不同参数正是这一现象。因此本文的做法是主表报告"
+     "多种子均值与标准差，同时用附表 7 给出每个种子实际选中的参数与折内极差，让读者判断参数选择是否稳定，"
+     "而不是只呈现一个“调好的”结果。")
+param_df = read_str_table("table_param_compare.csv")
+param_df["参数取值"] = param_df["参数取值"].map(compact_params)
+table(doc, param_df, "表 6-5  housing 三种参数设置下的表现（5 种子均值）",
+      widths=[2.4, 2.1, 3.6, 1.5, 1.5, 1.6, 1.4, 1.3], font_size=7.4, keep_together=True)
 
 # ---------------- 7
 heading(doc, "七、结果解释与业务洞察", 1)
 heading(doc, "7.1 模型可解释性", 2)
 body(doc,
-     "图 7-1 给出两种解释路径。马氏距离按 d² 的特征分解计算每个字段对马氏半径的贡献：NOX 占 21.3%、TAX 占 13.7%、"
-     "RM 占 12.8%、DIS 占 9.0%、CRIM 占 7.5%，说明污染浓度、税率、房间数与区位距离是驱动异常的主要维度。"
-     "Isolation Forest 用“把某特征替换为训练中位数后得分下降”衡量贡献：B 占 32.7%、RM 占 18.4%、ZN 占 11.3%、"
-     "LSTAT 占 7.3%、CRIM 占 6.9%。两种方法的排序不同，是因为它们衡量的是不同东西：前者衡量“偏离椭球中心的方向”，"
+     f"图 7-1 给出两种解释路径。马氏距离按 d² 的特征分解计算每个字段对马氏半径的贡献：{contrib_top('Mahalanobis')}，"
+     "说明污染浓度、税率、房间数与区位距离是驱动异常的主要维度。"
+     f"Isolation Forest 用“把某特征替换为训练中位数后得分下降”衡量贡献：{contrib_top('Isolation Forest')}。"
+     "两种方法的排序不同，是因为它们衡量的是不同东西：前者衡量“偏离椭球中心的方向”，"
      "后者衡量“对孤立路径的贡献”。业务解释时应说明所用方法，不能把两者混为一谈。")
 figure(doc, "fig11_feature_contrib.png", "图 7-1  Mahalanobis 与 Isolation Forest 的特征贡献占比", 14.6)
 
 heading(doc, "7.2 业务洞察", 2)
 body(doc,
-     "洞察一：在低维、特征相关的表格数据上，统计距离方法应作为首选基线。马氏距离在 housing 上以 0.9026 的 PR-AUC、"
-     "0.8933 的召回和 2.04% 的误报全面优于树模型与密度模型；它的计算成本只有毫秒级，且特征贡献可直接分解，"
-     "比黑盒模型更适合需要解释的复核场景。")
+     "洞察一：在低维、特征相关的表格数据上，统计距离方法应作为首选基线。马氏距离在 housing 上以 "
+     f"{f4(agg('housing','Mahalanobis','pr_auc'))} 的 PR-AUC、{f4(agg('housing','Mahalanobis','recall'))} 的召回和 "
+     f"{pct(agg('housing','Mahalanobis','fpr'))} 的误报全面优于树模型与密度模型；它的计算成本只有毫秒级，"
+     "且特征贡献可直接分解，比黑盒模型更适合需要解释的复核场景。")
 body(doc,
-     "洞察二：阈值校准对误报的影响不亚于模型选择。Z-Score 的平均 FPR 为 9.05%，但单种子最高达到 11.68%；"
+     "洞察二：阈值校准对误报的影响不亚于模型选择。Z-Score 的平均 FPR 为 "
+     f"{pct(agg('housing','Z-Score','fpr'))}，但单种子最高达到 {pct(max(seed_values('housing','Z-Score','fpr')))}；"
      "同样的分数分布，仅因 calib 与 test 的抽样波动就会跨过 10% 的红线。建议在 calib 上按目标 FPR 的 80% 设置阈值"
      "（留安全裕度），并在上线后按月用正常样本重新校准。")
 body(doc,
-     "洞察三：极端组合异常是最难的一类，单模型难以兼顾。马氏距离对协同异常召回 1.00，但对极端组合只有 0.63；"
-     "融合模型把极端组合召回提升到 0.92，代价是精确率下降约 11 个百分点。若业务不能接受漏报，应采用融合模型并配置"
-     "人工复核；若复核资源有限，则用马氏距离并接受少量极端组合漏报。")
+     f"洞察三：极端组合异常是最难的一类，单模型难以兼顾。马氏距离对协同异常召回 "
+     f"{ptype_num('Mahalanobis','协同异常'):.2f}，但对极端组合只有 {ptype_num('Mahalanobis','极端组合'):.2f}；"
+     f"融合模型把极端组合召回提升到 {ptype_num('Rank-Ensemble','极端组合'):.2f}，"
+     f"代价是精确率下降 {(agg('housing','Mahalanobis','precision') - agg('housing','Rank-Ensemble','precision')) * 100:.1f} "
+     "个百分点。若业务不能接受漏报，应采用融合模型并配置人工复核；若复核资源有限，则用马氏距离并接受少量极端组合漏报。")
 body(doc,
      "洞察四：自然长尾是误报的主要来源，不应把误报全部当作模型缺陷。5 个误报样本都是低房间数、高犯罪率、极高税率的"
      "真实边界样本；它们对业务可能同样值得关注。建议把误报分为“数据错误”“业务边界”“模型错误”三类，分别处理，"
@@ -693,6 +836,14 @@ body(doc,
      "Isolation Forest 在本文的低维相关数据上表现最弱，说明“常用即最优”的假设不成立；LOF 对邻居数高度敏感，"
      "必须报告参数区间而不是单点结果。")
 body(doc,
+     "调参方面，本文用训练集内 3 折交叉验证替代单次验证集选参，并把“默认参数、交叉验证最优、交叉验证最差”三种取值"
+     f"放在同一测试集上对照：One-Class SVM 从默认 nu=0.5 改到低 nu 后 F1 提升 "
+     f"{pcv('One-Class SVM','交叉验证最优') - pcv('One-Class SVM','默认参数'):.2f}，马氏距离的默认值恰好已是最优，"
+     f"Isolation Forest 反而使 F1 下降 {pcv('Isolation Forest','默认参数') - pcv('Isolation Forest','交叉验证最优'):.2f}。"
+     "因此“要不要调参”没有统一答案：参数曲面陡峭且默认值落在坏区间时必须调（如 One-Class SVM），参数曲面平坦时"
+     "调参只是增加方差（如 Isolation Forest），而参数选错方向的代价远大于不调（马氏距离相差 "
+     f"{pcv('Mahalanobis','交叉验证最优') - pcv('Mahalanobis','交叉验证最差'):.2f}）。")
+body(doc,
      "方法层面，本文验证了“注入真值 + 三划分 + 阈值约束”的协议可以有效避免测试集泄漏，并把模型能力与阈值选择分开。"
      "业务层面，本文给出的两层筛查流程、误报分类与回校准规则可以直接用于数据质量与风险复核。")
 
@@ -705,6 +856,12 @@ body(doc,
 body(doc,
      "此外，本文的异常是人工注入的，虽包含三种类型，但与真实故障的生成机制仍有差距；业务建议基于模拟异常，"
      "落地前需要真实标签与代价矩阵做校准。")
+body(doc,
+     "参数与协议方面还有三点局限：其一，交叉验证的折内训练样本只有约 123 条（housing）与约 35 条（iris），"
+     "折内 F1 系统性偏低，且在小样本上容易选中噪声，Isolation Forest 在不同种子上选出不同参数即为表现；"
+     "其二，为保持可比性，交叉验证沿用了第 5 节确定的特征列，只在折内重新估计标准化参数，"
+     "严格意义上的嵌套特征选择尚未实现；其三，网格是人为指定的有限集合，One-Class SVM 的最优 nu 落在网格下边界 0.01 附近，"
+     "说明真实最优值可能在网格之外，报告中的“最优”应理解为“候选集内最优”。")
 
 heading(doc, "8.3 改进方向", 2)
 body(doc,
@@ -806,6 +963,10 @@ table(doc, read_table("table_group.csv"), "附表 5  小组分工表",
       widths=[2.2, 2.6, 5.4, 4.0, 1.4], font_size=8.5)
 table(doc, read_table("table_experiment_log.csv"), "附表 6  实验记录表",
       widths=[2.2, 3.0, 4.6, 4.2, 3.0], font_size=7.8, keep_together=True)
+stability = read_str_table("table_param_stability.csv")
+stability["选中的参数"] = stability["选中的参数"].map(compact_params)
+table(doc, stability, "附表 7  housing 交叉验证选参的逐种子记录",
+      widths=[3.4, 1.6, 5.4, 2.4, 2.0, 2.0], font_size=7.8)
 
 # ---------------- 附录 A：关键代码
 doc.add_page_break()
@@ -813,10 +974,10 @@ heading(doc, "附录 A  关键代码片段", 1)
 body(doc,
      "以下片段取自成果包源码，行号与提交版本一致；完整代码、运行脚本与单元测试见 src/ 与 tests/，"
      "复现方式见 README.md。为便于排版，片段只保留核心逻辑，省略了类型注解与日志输出。")
-code_block(doc, "src/experiment.py", 29, 9, "代码 A-1  fit / calib / val / test 四划分与无泄漏断言")
+code_block(doc, "src/experiment.py", 32, 9, "代码 A-1  fit / calib / val / test 四划分与无泄漏断言")
 code_block(doc, "src/inject.py", 92, 14, "代码 A-2  三类异常的注入强度")
-code_block(doc, "src/detectors.py", 197, 14, "代码 A-3  FPR 约束下的阈值选择")
-code_block(doc, "src/detectors.py", 40, 14, "代码 A-4  马氏距离检测器：MCD 稳健协方差估计")
+code_block(doc, "src/detectors.py", 206, 14, "代码 A-3  FPR 约束下的阈值选择")
+code_block(doc, "src/detectors.py", 268, 15, "代码 A-4  训练集内三折交叉验证选参")
 
 # ---------------- save
 doc.core_properties.title = "T13 多元异常检测算法对比"

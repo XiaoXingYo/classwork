@@ -3,17 +3,19 @@ from __future__ import annotations
 
 import json
 import time
+from collections import Counter
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import KFold, train_test_split
 
 from config import (HOUSING_FEATURES, IRIS_FEATURES, IRIS_SEEDS, OUT_DIR, SEEDS,
                     TABLE_DIR)
 from data_loader import load_clean, run_audit
-from detectors import (IForestDetector, build_detector, default_grid,
+from detectors import (IForestDetector, build_detector, cv_score, cv_select,
+                       default_grid, default_params, evaluate_params,
                        select_threshold, tune_detector)
 from evaluation import (aggregate_metrics, binary_metrics, per_type_recall,
                         score_metrics)
@@ -22,6 +24,7 @@ from features import (add_features, feature_columns, fit_scaler, select_features
 from inject import inject_anomalies, injection_summary, reference_stats
 
 METHODS = ["Z-Score", "Mahalanobis", "LOF", "Isolation Forest", "One-Class SVM"]
+CV_FOLDS = 3
 ARTIFACT_DIR = OUT_DIR / "artifacts"
 ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -45,6 +48,53 @@ def _type_labels(n: int, type_by_row: Dict[int, str]) -> np.ndarray:
     return np.array([type_by_row.get(i, "normal") for i in range(n)], dtype=object)
 
 
+def _build_cv_folds(seed: int, raw_fit: pd.DataFrame, stats: Dict,
+                    inj_cols: List[str], n_splits: int = CV_FOLDS) -> List[Dict]:
+    """K-fold split of the normal training rows, with a per-fold injection.
+
+    Fold frames stay at the raw field level so that different feature subsets can
+    reuse the same folds.
+    """
+    folds = []
+    idx = np.arange(len(raw_fit))
+    splitter = KFold(n_splits=n_splits, shuffle=True, random_state=seed + 7)
+    for k, (tr, ho) in enumerate(splitter.split(idx)):
+        tr2, cal2 = train_test_split(tr, test_size=0.25, random_state=seed + 8 + k)
+        n_inj = _n_anomalies(len(ho), 0.10, 4)
+        ho_inj = inject_anomalies(raw_fit.iloc[ho].reset_index(drop=True), n_inj,
+                                  seed + 2000 + k, inj_cols, stats, tag="cv")
+        folds.append({
+            "fold": k,
+            "train_idx": tr2,
+            "cal_idx": cal2,
+            "holdout_frame": ho_inj.frame,
+            "y_hold": ho_inj.labels,
+            "n_anom": n_inj,
+        })
+    return folds
+
+
+def _fold_matrices(p: Dict, cols: Optional[List[str]] = None) -> List[Dict]:
+    """Transform the CV folds; the scaler is refitted on each fold's train slice."""
+    cols = list(cols if cols is not None else p["selected"])
+    raw_fit = p["raw"]["fit"]
+    out = []
+    for f in p["folds"]:
+        train_feat = add_features(raw_fit.iloc[f["train_idx"]].reset_index(drop=True),
+                                  p["dataset"])
+        cal_feat = add_features(raw_fit.iloc[f["cal_idx"]].reset_index(drop=True),
+                                p["dataset"])
+        hold_feat = add_features(f["holdout_frame"], p["dataset"])
+        scaler = fit_scaler(train_feat[cols], method="robust")
+        out.append({
+            "X_train": transform(train_feat, scaler, cols),
+            "X_cal": transform(cal_feat, scaler, cols),
+            "X_hold": transform(hold_feat, scaler, cols),
+            "y_hold": f["y_hold"],
+        })
+    return out
+
+
 def prepare_seed(dataset: str, seed: int, feature_mode: str = "engineered"):
     df, _ = load_clean(dataset)
     base_cols = IRIS_FEATURES if dataset == "iris" else HOUSING_FEATURES
@@ -57,6 +107,7 @@ def prepare_seed(dataset: str, seed: int, feature_mode: str = "engineered"):
     n_val = _n_anomalies(len(raw["val"]), 0.20, 10 if dataset == "housing" else 4)
     test_inj = inject_anomalies(raw["test"], n_test, seed, inj_cols, stats, tag="test")
     val_inj = inject_anomalies(raw["val"], n_val, seed + 1000, inj_cols, stats, tag="val")
+    folds = _build_cv_folds(seed, raw["fit"], stats, inj_cols)
 
     fit_feat = add_features(raw["fit"], dataset)
     cal_feat = add_features(raw["cal"], dataset)
@@ -72,8 +123,8 @@ def prepare_seed(dataset: str, seed: int, feature_mode: str = "engineered"):
         "test": transform(test_feat, scaler, selected),
     }
     return {
-        "df": df, "splits": splits, "raw": raw, "stats": stats,
-        "test_injection": test_inj, "val_injection": val_inj,
+        "dataset": dataset, "df": df, "splits": splits, "raw": raw, "stats": stats,
+        "test_injection": test_inj, "val_injection": val_inj, "folds": folds,
         "X": X, "selected": selected, "scaler": scaler,
         "y_val": val_inj.labels, "y_test": test_inj.labels,
         "type_test": _type_labels(len(test_inj.frame), test_inj.type_by_row),
@@ -92,13 +143,14 @@ def run_one_seed(dataset: str, seed: int, feature_mode: str = "engineered",
     t_start = time.perf_counter()
     p = prepare_seed(dataset, seed, feature_mode)
     X, y_val, y_test = p["X"], p["y_val"], p["y_test"]
+    folds = _fold_matrices(p)
     records = {}
     tuned_models = []
     curves = {}
 
     for name in METHODS:
         tuned = tune_detector(name, X["fit"], X["cal"], X["val"], y_val,
-                              dataset, seed)
+                              dataset, seed, folds=folds)
         s_test, score_seconds = _score_one(tuned.model, X["test"])
         tm = binary_metrics(y_test, s_test, tuned.threshold)
         sm = score_metrics(y_test, s_test)
@@ -107,6 +159,7 @@ def run_one_seed(dataset: str, seed: int, feature_mode: str = "engineered",
         records[name] = {
             "method": name,
             "params": tuned.params,
+            "worst_params": tuned.worst_params,
             "threshold": tuned.threshold,
             "fit_seconds": tuned.fit_seconds,
             "score_seconds": score_seconds,
@@ -114,6 +167,11 @@ def run_one_seed(dataset: str, seed: int, feature_mode: str = "engineered",
             "val_recall": tuned.val_metrics["recall"],
             "val_cal_fpr": tuned.val_metrics["cal_fpr"],
             "val_pr_auc": tuned.val_pr_auc,
+            "cv_f1": tuned.cv_f1,
+            "cv_f1_std": tuned.cv_f1_std,
+            "cv_f1_worst": tuned.cv_f1_worst,
+            "cv_f1_range": tuned.cv_f1_range,
+            "n_candidates": tuned.n_candidates,
             **tm, **sm,
             "per_type_recall": {r.injection_type: float(r.recall) for r in ptr.itertuples()},
         }
@@ -142,6 +200,7 @@ def run_one_seed(dataset: str, seed: int, feature_mode: str = "engineered",
     records["Rank-Ensemble"] = {
         "method": "Rank-Ensemble",
         "params": {"members": METHODS, "aggregation": "z-score mean"},
+        "worst_params": {},
         "threshold": ens_tau,
         "fit_seconds": sum(m.fit_seconds for m in tuned_models),
         "score_seconds": sum(m.score_seconds for m in tuned_models),
@@ -149,6 +208,8 @@ def run_one_seed(dataset: str, seed: int, feature_mode: str = "engineered",
         "val_recall": ens_sel["recall"],
         "val_cal_fpr": ens_sel["cal_fpr"],
         "val_pr_auc": float(score_metrics(y_val, ens_val)["pr_auc"]),
+        "cv_f1": None, "cv_f1_std": None, "cv_f1_worst": None,
+        "cv_f1_range": None, "n_candidates": None,
         **ens_tm, **ens_sm,
         "per_type_recall": {r.injection_type: float(r.recall) for r in ens_ptr.itertuples()},
     }
@@ -180,6 +241,9 @@ def run_one_seed(dataset: str, seed: int, feature_mode: str = "engineered",
         "n_test": len(p["splits"]["test"]),
         "n_test_anom": p["n_test_anom"],
         "n_val_anom": p["n_val_anom"],
+        "n_cv_folds": len(folds),
+        "cv_fold_sizes": [int(len(f["y_hold"])) for f in p["folds"]],
+        "cv_fold_anoms": [int(f["n_anom"]) for f in p["folds"]],
         "selected_features": p["selected"],
         "n_features": len(p["selected"]),
         "injection_summary": injection_summary(p["test_injection"].manifest).to_dict("records"),
@@ -229,8 +293,14 @@ def _params_text(method: str, results: Dict) -> str:
     if method == "Rank-Ensemble":
         return "五模型 z-score 等权平均"
     recs = [s["methods"][method]["params"] for s in results["per_seed"]]
-    first = recs[0]
-    return ", ".join(f"{k}={v}" for k, v in first.items()) if first else "无超参数"
+    if not recs[0]:
+        return "无超参数"
+    counts = Counter(json.dumps(r, sort_keys=True, ensure_ascii=False) for r in recs)
+    top, n = counts.most_common(1)[0]
+    text = ", ".join(f"{k}={v}" for k, v in json.loads(top).items())
+    if n < len(recs):
+        text += f"（{n}/{len(recs)} 种子）"
+    return text
 
 
 def per_type_table(results: Dict) -> pd.DataFrame:
@@ -269,7 +339,8 @@ def run_feature_gain(dataset: str = "housing", seed: int = 42) -> pd.DataFrame:
         if params is None:
             tuned = tune_detector("Isolation Forest", Xf, Xc, Xv, y_val,
                                   dataset, seed,
-                                  grid=default_grid(dataset, "Isolation Forest"))
+                                  grid=default_grid(dataset, "Isolation Forest"),
+                                  folds=_fold_matrices(p, selected))
             model, tau = tuned.model, tuned.threshold
             val_f1, val_pr = tuned.val_metrics["f1"], tuned.val_pr_auc
         else:
@@ -351,7 +422,7 @@ def run_sensitivity(dataset: str = "housing", seed: int = 42) -> Tuple[pd.DataFr
         for q in qs:
             add("Isolation Forest", "max_samples", ms, q, s_cal, s_test)
 
-    for nu in (0.01, 0.05, 0.1, 0.2, 0.3):
+    for nu in (0.01, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7):
         for gamma in ("scale", 0.01, 0.05, 0.1, 0.5):
             m = build_detector("One-Class SVM", {"nu": nu, "gamma": gamma}, seed).fit(X["fit"])
             s_cal, s_test = m.score(X["cal"]), m.score(X["test"])
@@ -381,6 +452,106 @@ def run_sensitivity(dataset: str = "housing", seed: int = 42) -> Tuple[pd.DataFr
     return long, pd.DataFrame(summary_rows).sort_values("f1_range", ascending=False)
 
 
+TUNED_SETTINGS = ("默认参数", "交叉验证最优", "交叉验证最差")
+SETTING_ORDER = {s: i for i, s in enumerate(TUNED_SETTINGS + ("无超参数",))}
+
+
+def _short_params(params: Dict) -> str:
+    if not params:
+        return "无超参数"
+    return ", ".join(f"{k}={v}" for k, v in params.items())
+
+
+def run_param_compare(dataset: str = "housing",
+                      seeds: Optional[List[int]] = None) -> pd.DataFrame:
+    """Compare sklearn defaults, the CV-selected setting and the worst CV setting.
+
+    All three are fitted on the same normal rows, given the same threshold policy
+    and scored on the same test rows, so only the hyper-parameter setting varies.
+    """
+    seeds = seeds or (IRIS_SEEDS if dataset == "iris" else SEEDS)
+    rows = []
+    for seed in seeds:
+        p = prepare_seed(dataset, seed, "engineered")
+        folds = _fold_matrices(p)
+        X, y_val, y_test = p["X"], p["y_val"], p["y_test"]
+        for name in METHODS:
+            if name == "Z-Score":
+                settings = {"无超参数": {}}
+                cv_f1 = {"无超参数": float("nan")}
+            else:
+                best, worst, _ = cv_select(name, folds, dataset, seed,
+                                           default_grid(dataset, name))
+                settings = {
+                    "默认参数": default_params(name),
+                    "交叉验证最优": best["params"],
+                    "交叉验证最差": worst["params"],
+                }
+                cv_f1 = {
+                    "默认参数": cv_score(name, settings["默认参数"], folds, seed)["cv_f1_mean"],
+                    "交叉验证最优": best["cv_f1_mean"],
+                    "交叉验证最差": worst["cv_f1_mean"],
+                }
+            for setting, params in settings.items():
+                tuned = evaluate_params(name, params, X["fit"], X["cal"],
+                                        X["val"], y_val, seed)
+                s_test = tuned.model.score(X["test"])
+                tm = binary_metrics(y_test, s_test, tuned.threshold)
+                sm = score_metrics(y_test, s_test)
+                rows.append({
+                    "dataset": dataset, "seed": seed, "method": name,
+                    "setting": setting, "params": _short_params(params),
+                    "cv_f1": cv_f1[setting],
+                    "recall": tm["recall"], "precision": tm["precision"],
+                    "f1": tm["f1"], "fpr": tm["fpr"], "pr_auc": sm["pr_auc"],
+                })
+    return pd.DataFrame(rows)
+
+
+def param_compare_table(raw: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate the parameter settings over seeds for the report."""
+    out = []
+    for method in METHODS:
+        g = raw[raw["method"] == method]
+        if g.empty:
+            continue
+        for setting in sorted(g["setting"].unique(), key=lambda s: SETTING_ORDER[s]):
+            sub = g[g["setting"] == setting]
+            counts = Counter(sub["params"])
+            params, n = counts.most_common(1)[0]
+            if n < len(sub):
+                params = f"{params}（{n}/{len(sub)} 种子）"
+            cv = sub["cv_f1"].mean()
+            gap = sub["f1"].mean() - cv if np.isfinite(cv) else float("nan")
+            out.append({
+                "模型": method, "参数设置": setting, "参数取值": params,
+                "CV F1": "-" if not np.isfinite(cv) else f"{cv:.4f}",
+                "测试 F1": f"{sub['f1'].mean():.4f}",
+                "CV-测试差": "-" if not np.isfinite(gap) else f"{gap:+.4f}",
+                "Recall": f"{sub['recall'].mean():.4f}",
+                "FPR": f"{sub['fpr'].mean():.4f}",
+            })
+    return pd.DataFrame(out)
+
+
+def param_stability_table(results: Dict) -> pd.DataFrame:
+    """Per-seed record of the CV-selected setting, for the appendix."""
+    rows = []
+    for s in results["per_seed"]:
+        for name in METHODS:
+            r = s["methods"][name]
+            if r.get("cv_f1") is None:
+                continue
+            rows.append({
+                "模型": name, "种子": s["seed"],
+                "选中的参数": _short_params(r["params"]),
+                "CV F1": f"{r['cv_f1']:.4f}",
+                "CV 极差": f"{r['cv_f1_range']:.4f}",
+                "测试 F1": f"{r['f1']:.4f}",
+            })
+    return pd.DataFrame(rows)
+
+
 def run_main() -> Dict:
     run_audit()
     all_results = {}
@@ -407,6 +578,15 @@ def run_main() -> Dict:
     sens_long.to_csv(TABLE_DIR / "table_sensitivity.csv", index=False, encoding="utf-8-sig")
     sens_summary.to_csv(TABLE_DIR / "table_sensitivity_summary.csv",
                         index=False, encoding="utf-8-sig")
+
+    # Tuning necessity: sklearn defaults vs CV-selected vs worst-in-grid.
+    pc_raw = run_param_compare("housing", SEEDS)
+    pc_raw.to_csv(TABLE_DIR / "table_param_compare_raw.csv", index=False,
+                  encoding="utf-8-sig")
+    param_compare_table(pc_raw).to_csv(TABLE_DIR / "table_param_compare.csv",
+                                       index=False, encoding="utf-8-sig")
+    param_stability_table(all_results["housing"]).to_csv(
+        TABLE_DIR / "table_param_stability.csv", index=False, encoding="utf-8-sig")
 
     # Injection configuration table.
     inj_rows = []
