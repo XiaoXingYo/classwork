@@ -1229,7 +1229,8 @@ for line in git_text.splitlines():
     if line.strip():
         body(doc, line.strip(), indent=False, size=12, align=WD_ALIGN_PARAGRAPH.LEFT)
 body(doc,
-     "说明：以上为仓库的实际提交记录，完整改动明细见随包的 git_log.txt；远程仓库地址见上方“远程仓库”一行。")
+     "说明：全部源码、图表、结果表与本报告均在该仓库中，可直接用 "
+     "git clone https://github.com/XiaoXingYo/classwork.git 获取；完整改动明细另见随包的 git_log.txt。")
 
 # ---------------- 10
 heading(doc, "十、工具使用声明与诚信承诺", 1)
