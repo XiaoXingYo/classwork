@@ -1229,8 +1229,7 @@ for line in git_text.splitlines():
     if line.strip():
         body(doc, line.strip(), indent=False, size=12, align=WD_ALIGN_PARAGRAPH.LEFT)
 body(doc,
-     "说明：以上为本地仓库的实际提交记录，完整改动明细见随包的 git_log.txt。若后续把仓库推送到 Gitee 或 GitHub，"
-     "可在此处补充可访问的仓库地址。")
+     "说明：以上为仓库的实际提交记录，完整改动明细见随包的 git_log.txt；远程仓库地址见上方“远程仓库”一行。")
 
 # ---------------- 10
 heading(doc, "十、工具使用声明与诚信承诺", 1)

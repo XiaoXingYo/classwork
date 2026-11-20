@@ -8,6 +8,8 @@ from pathlib import Path
 
 from config import LOG_DIR, ROOT
 
+GITHUB_URL = "https://github.com/XiaoXingYo/classwork"
+
 
 def git(*args: str) -> str:
     return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True,
@@ -16,9 +18,11 @@ def git(*args: str) -> str:
 
 count = int(git("rev-list", "--count", "HEAD"))
 log = git("--no-pager", "log", "--pretty=format:%ad  %s", "--date=short")
+remote = git("remote", "get-url", "origin") or GITHUB_URL
 
 text = "\n".join([
-    "Git 仓库：随包顶层目录 T13_程龙飞_实训成果/（本地仓库，未配置远程地址）",
+    "Git 仓库：随包顶层目录 T13_程龙飞_实训成果/（本地仓库）",
+    f"远程仓库：{remote}",
     f"提交总数：{count} 次（含本报告所在提交）",
     "提交记录（日期  说明）：",
     log,
