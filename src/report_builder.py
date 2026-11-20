@@ -133,7 +133,9 @@ def compact_params(value) -> str:
     s = str(value)
     for a, b in [("n_estimators", "n_est"), ("max_samples", "m_s"),
                  ("max_features", "m_f"), ("support_fraction", "sf"),
-                 ("n_neighbors", "k"), ("gamma", "γ")]:
+                 ("n_neighbors", "k"), ("gamma", "γ"),
+                 ("One-Class SVM", "OCSVM"), ("Isolation Forest", "IForest"),
+                 ("Mahalanobis", "马氏"), ("Rank-Ensemble", "融合"), ("Z-Score", "Z")]:
         s = s.replace(a, b)
     return s
 
@@ -173,14 +175,62 @@ def set_run_font(run, name="宋体", size=12, bold=False, color=None):
 def body(doc, text: str, indent=True, bold=False, size=12, align=WD_ALIGN_PARAGRAPH.JUSTIFY,
          space_after=0):
     p = doc.add_paragraph()
-    p.paragraph_format.line_spacing = 1.5
+    p.paragraph_format.line_spacing = Pt(20)
+    p.paragraph_format.line_spacing_rule = WD_LINE_SPACING.EXACTLY
     p.paragraph_format.space_after = Pt(space_after)
     p.alignment = align
     if indent:
         p.paragraph_format.first_line_indent = Pt(24)
-    r = p.add_run(text)
-    set_run_font(r, "宋体", size, bold)
+        p._p.get_or_add_pPr().ind.set(qn("w:firstLineChars"), "200")
+    add_text_with_citations(p, text, size, bold)
     return p
+
+
+CITE_RE = re.compile(r"\[(\d+(?:\s*[,，\-–]\s*\d+)*)\]")
+
+
+def add_ref_field(paragraph, number: int, size: float = 12, bold: bool = False):
+    """Insert a Word cross-reference field pointing at bookmark _RefNum<number>."""
+    fld = OxmlElement("w:fldSimple")
+    fld.set(qn("w:instr"), f" REF _RefNum{number} \\h ")
+    run = OxmlElement("w:r")
+    rpr = OxmlElement("w:rPr")
+    rfonts = OxmlElement("w:rFonts")
+    rfonts.set(qn("w:ascii"), "宋体")
+    rfonts.set(qn("w:hAnsi"), "宋体")
+    rfonts.set(qn("w:eastAsia"), "宋体")
+    sz = OxmlElement("w:sz")
+    sz.set(qn("w:val"), str(int(size * 2)))
+    rpr.append(rfonts)
+    rpr.append(sz)
+    if bold:
+        rpr.append(OxmlElement("w:b"))
+    t = OxmlElement("w:t")
+    t.text = str(number)
+    run.append(rpr)
+    run.append(t)
+    fld.append(run)
+    paragraph._p.append(fld)
+
+
+def add_text_with_citations(paragraph, text: str, size: float = 12, bold: bool = False):
+    """Write text, turning every [n] / [n,m] marker into Word cross-reference fields."""
+    pos = 0
+    for m in CITE_RE.finditer(text):
+        if m.start() > pos:
+            set_run_font(paragraph.add_run(text[pos:m.start()]), "宋体", size, bold)
+        set_run_font(paragraph.add_run("["), "宋体", size, bold)
+        for part in re.split(r"(\s*[,，\-–]\s*)", m.group(1)):
+            if not part:
+                continue
+            if part.strip().isdigit():
+                add_ref_field(paragraph, int(part.strip()), size, bold)
+            else:
+                set_run_font(paragraph.add_run(part), "宋体", size, bold)
+        set_run_font(paragraph.add_run("]"), "宋体", size, bold)
+        pos = m.end()
+    if pos < len(text):
+        set_run_font(paragraph.add_run(text[pos:]), "宋体", size, bold)
 
 
 def heading(doc, text: str, level=1):
@@ -222,13 +272,65 @@ def repeat_header(row):
     trPr.append(tblHeader)
 
 
-def table(doc, df: pd.DataFrame, cap: str, widths=None, font_size=9, header_fill="D9E2F3",
+def three_line_borders(t, top_sz=12, bottom_sz=12):
+    """Give the table a 三线表 look: only top, header and bottom rules."""
+    tblPr = t._tbl.tblPr
+    for old in tblPr.findall(qn("w:tblBorders")):
+        tblPr.remove(old)
+    borders = OxmlElement("w:tblBorders")
+    for edge, val, sz in (("top", "single", top_sz), ("bottom", "single", bottom_sz),
+                          ("left", "none", 0), ("right", "none", 0),
+                          ("insideH", "none", 0), ("insideV", "none", 0)):
+        el = OxmlElement(f"w:{edge}")
+        el.set(qn("w:val"), val)
+        el.set(qn("w:sz"), str(sz))
+        el.set(qn("w:space"), "0")
+        el.set(qn("w:color"), "000000")
+        borders.append(el)
+    anchor = None
+    for tag in ("w:shd", "w:tblLayout", "w:tblCellMar", "w:tblLook"):
+        anchor = tblPr.find(qn(tag))
+        if anchor is not None:
+            break
+    if anchor is not None:
+        anchor.addprevious(borders)
+    else:
+        tblPr.append(borders)
+
+    mar = OxmlElement("w:tblCellMar")
+    for side, w in (("top", 0), ("left", 57), ("bottom", 0), ("right", 57)):
+        el = OxmlElement(f"w:{side}")
+        el.set(qn("w:w"), str(w))
+        el.set(qn("w:type"), "dxa")
+        mar.append(el)
+    look = tblPr.find(qn("w:tblLook"))
+    if look is not None:
+        look.addprevious(mar)
+    else:
+        tblPr.append(mar)
+
+
+def cell_bottom_border(cell, sz=8):
+    tcPr = cell._tc.get_or_add_tcPr()
+    for old in tcPr.findall(qn("w:tcBorders")):
+        tcPr.remove(old)
+    borders = OxmlElement("w:tcBorders")
+    bottom = OxmlElement("w:bottom")
+    bottom.set(qn("w:val"), "single")
+    bottom.set(qn("w:sz"), str(sz))
+    bottom.set(qn("w:space"), "0")
+    bottom.set(qn("w:color"), "000000")
+    borders.append(bottom)
+    tcPr.append(borders)
+
+
+def table(doc, df: pd.DataFrame, cap: str, widths=None, font_size=9, header_fill=None,
           keep_together=False):
     caption(doc, cap, keep_next=True)
     t = doc.add_table(rows=1, cols=len(df.columns))
-    t.style = "Table Grid"
     t.alignment = WD_TABLE_ALIGNMENT.CENTER
     t.autofit = False
+    three_line_borders(t)
     hdr = t.rows[0]
     repeat_header(hdr)
     _no_split(hdr)
@@ -238,9 +340,12 @@ def table(doc, df: pd.DataFrame, cap: str, widths=None, font_size=9, header_fill
         p = cell.paragraphs[0]
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p.paragraph_format.space_after = Pt(0)
+        p.paragraph_format.line_spacing = 1.0
         r = p.add_run(str(c))
         set_run_font(r, "宋体", font_size, True)
-        shade(cell, header_fill)
+        if header_fill:
+            shade(cell, header_fill)
+        cell_bottom_border(cell)
         if widths:
             cell.width = Cm(widths[i])
     for _, row in df.iterrows():
@@ -767,7 +872,7 @@ perf = read_table("table_model_performance.csv")
 perf_h = perf[perf["数据集"] == "housing"]
 perf_h = perf_view(perf_h, with_dataset=False, with_params=True, with_time=False, with_roc=True)
 table(doc, perf_h, "表 6-2  housing 模型性能对比（10 种子均值±标准差）",
-      widths=[2.2, 2.7, 2.2, 2.1, 1.9, 2.0, 2.1], font_size=7.4, keep_together=True)
+      widths=[2.1, 3.0, 2.1, 2.1, 1.9, 1.9, 2.0], font_size=8.0, keep_together=True)
 mb_rec = seed_values("housing", "Mahalanobis", "recall")
 ens_rec = seed_values("housing", "Rank-Ensemble", "recall")
 mb_ok = sum(1 for r in mb_rec if r >= 0.85)
@@ -1122,7 +1227,7 @@ git_log = OUT_DIR / "logs" / "git_stats.txt"
 git_text = git_log.read_text(encoding="utf-8").lstrip("\ufeff") if git_log.exists() else "本地 Git 仓库已初始化；提交统计见随包 git_log.txt。"
 for line in git_text.splitlines():
     if line.strip():
-        body(doc, line.strip(), indent=False, size=10.5, align=WD_ALIGN_PARAGRAPH.LEFT)
+        body(doc, line.strip(), indent=False, size=12, align=WD_ALIGN_PARAGRAPH.LEFT)
 body(doc,
      "说明：以上为本地仓库的实际提交记录，完整改动明细见随包的 git_log.txt。若后续把仓库推送到 Gitee 或 GitHub，"
      "可在此处补充可访问的仓库地址。")
@@ -1175,8 +1280,17 @@ for i, ref in enumerate(refs, 1):
     p.paragraph_format.space_after = Pt(2)
     p.paragraph_format.left_indent = Cm(0.74)
     p.paragraph_format.first_line_indent = Cm(-0.74)
-    r = p.add_run(f"[{i}] {ref}")
-    set_run_font(r, "宋体", 10)
+    set_run_font(p.add_run("["), "宋体", 10.5)
+    num = p.add_run(str(i))
+    set_run_font(num, "宋体", 10.5)
+    start = OxmlElement("w:bookmarkStart")
+    start.set(qn("w:id"), str(100 + i))
+    start.set(qn("w:name"), f"_RefNum{i}")
+    end = OxmlElement("w:bookmarkEnd")
+    end.set(qn("w:id"), str(100 + i))
+    num._r.addprevious(start)
+    num._r.addnext(end)
+    set_run_font(p.add_run(f"] {ref}"), "宋体", 10.5)
 
 # ---------------- appendices
 doc.add_page_break()

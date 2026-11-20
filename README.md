@@ -58,9 +58,11 @@ python src/run_all.py
 
 `run_all.py` 会依次执行数据审计、主实验、附表、特征贡献、绘图与报告生成。由于主实验含 3 折交叉验证调参与三组附加实验，完整运行约 12–15 分钟（CPU：AMD Ryzen 9 8945HX，16 核 32 线程）。
 
-报告由 `python-docx` 生成；`report/` 目录同时提供 Word 与由 Word 导出的 PDF（36 页）。
+报告由 `python-docx` 生成；`report/` 目录同时提供 Word 与由 Word 导出的 PDF（33 页）。
 
 > 报告使用 `python-docx` 生成，PDF 由 Word 导出，两者内容一致。
+>
+> 排版约定：正文宋体小四、首行缩进 2 字符、固定行距 20 磅；全部数据表为三线表；正文中的文献引用为 Word 交叉引用域（REF），可随参考文献编号自动更新（选中全文按 F9 刷新）。
 
 ## 4. 主要结果（housing，10 个随机种子均值）
 
