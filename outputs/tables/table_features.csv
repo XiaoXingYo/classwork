@@ -9,7 +9,7 @@ housing,TAX_RAD,TAX ÷ (RAD+1),税率与高速可达性的比值,是
 housing,AGE_LSTAT,AGE × LSTAT,房龄与低收入比例的交互,否（相关性筛选）
 housing,CRIM_LSTAT,CRIM × LSTAT,犯罪率与低收入比例的交互,否（相关性筛选）
 housing,PTRATIO_LSTAT,PTRATIO × LSTAT,师生比与低收入比例的交互,否（相关性筛选）
-iris,Petal_Area,Petal_Length × Petal_Width,花瓣面积，刻画花冠整体大小,是（与花瓣长度高度相关，被相关性筛选剔除）
+iris,Petal_Area,Petal_Length × Petal_Width,花瓣面积，刻画花冠整体大小,否（与花瓣长度高度相关，被相关性筛选剔除）
 iris,Sepal_Area,Sepal_Length × Sepal_Width,花萼面积，刻画萼片整体大小,是
 iris,Petal_Aspect,Petal_Length ÷ Petal_Width,花瓣细长程度,是
 iris,Sepal_Aspect,Sepal_Length ÷ Sepal_Width,花萼细长程度,是

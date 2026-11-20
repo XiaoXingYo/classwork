@@ -5,11 +5,11 @@ import json
 
 import pandas as pd
 
-from config import HOUSING_FEATURES, IRIS_FEATURES, OUT_DIR, TABLE_DIR
+from config import FIG_DIR, HOUSING_FEATURES, IRIS_FEATURES, OUT_DIR, TABLE_DIR
 
 DERIVED = {
     "iris": [
-        ("Petal_Area", "Petal_Length × Petal_Width", "花瓣面积，刻画花冠整体大小", "是（与花瓣长度高度相关，被相关性筛选剔除）"),
+        ("Petal_Area", "Petal_Length × Petal_Width", "花瓣面积，刻画花冠整体大小", "否（与花瓣长度高度相关，被相关性筛选剔除）"),
         ("Sepal_Area", "Sepal_Length × Sepal_Width", "花萼面积，刻画萼片整体大小", "是"),
         ("Petal_Aspect", "Petal_Length ÷ Petal_Width", "花瓣细长程度", "是"),
         ("Sepal_Aspect", "Sepal_Length ÷ Sepal_Width", "花萼细长程度", "是"),
@@ -30,8 +30,39 @@ DERIVED = {
 }
 
 
+def zscore_profile(dataset: str = "housing", seed: int = 42, top_n: int = 8) -> pd.DataFrame:
+    """Per-feature robust scale of the baseline, to explain its heavy-tail behaviour."""
+    import numpy as np
+
+    from experiment import prepare_seed
+    from detectors import ZScoreDetector
+
+    p = prepare_seed(dataset, seed, "engineered")
+    names = p["selected"]
+    fit, test = p["X"]["fit"], p["X"]["test"]
+    det = ZScoreDetector().fit(fit)
+    z = np.abs((test - det.mu) / det.sd)
+    arg = z.argmax(axis=1)
+    rows = []
+    for j, name in enumerate(names):
+        rows.append({
+            "特征": name,
+            "稳健中心": float(det.mu[j]),
+            "稳健尺度": float(det.sd[j]),
+            "测试集最大|z|": float(z[:, j].max()),
+            "成为行最大值的样本数": int((arg == j).sum()),
+        })
+    df = pd.DataFrame(rows).sort_values("测试集最大|z|", ascending=False)
+    return df.head(top_n).reset_index(drop=True)
+
+
 def main():
     metrics = json.load(open(OUT_DIR / "metrics.json", encoding="utf-8"))
+    zprofile = zscore_profile("housing", 42)
+    for c in ["稳健中心", "稳健尺度", "测试集最大|z|"]:
+        zprofile[c] = zprofile[c].map(lambda v: f"{v:.4f}")
+    zprofile.to_csv(TABLE_DIR / "table_zscore_profile.csv", index=False,
+                    encoding="utf-8-sig")
     rows = []
     for ds in ("housing", "iris"):
         selected = set(metrics[ds]["per_seed"][0]["selected_features"])
@@ -64,43 +95,59 @@ def main():
     top_mb_txt = "、".join(f"{r.feature} {r.mean_share * 100:.1f}%" for r in top_mb.itertuples())
     err_path = TABLE_DIR / "table_error_cases.csv"
     err_n = len(pd.read_csv(err_path)) if err_path.exists() else 0
+    ifpca = pd.read_csv(TABLE_DIR / "table_if_pca_raw.csv")
+    if_base = ifpca[ifpca["variant"] == "原始特征"]
+    if_white = ifpca[ifpca["variant"] == "PCA 白化特征"]
+
+    def ifpca_delta(key):
+        return float(if_white[key].mean() - if_base[key].mean())
 
     log = [
         {"日期": "2026-11-18", "实验内容": "数据审计与清洗",
          "参数设置": "iris 缺失按 Species 中位数；连续缺失≥3 行删除；完全重复删除",
          "结果": "iris 152→145 行；housing 506 行；缺失 13 格（1.71%）、重复 5 行（3.29%）",
          "结论/下一步": "两份数据可用；housing 自然长尾保留，不当作错误"},
-        {"日期": "2026-11-18", "实验内容": "主实验：5 类检测器 + 融合",
+        {"日期": "2026-11-18", "实验内容": "主实验：5 类检测器 + 融合（初版协议：最大化 val F1）",
          "参数设置": "housing 70/15/15 训练内划分 + 30% 测试；5 种子；训练集内 3 折 CV 选参；测试注入 15 个异常（9.87%）",
+         "结果": "Mahalanobis PR-AUC 0.9026、Recall 0.8933、FPR 0.0204；融合 Recall 0.9333、FPR 0.0350",
+         "结论/下一步": "Mahalanobis 达标但 FPR 预算未用尽；改为召回优先阈值并扩充网格"},
+        {"日期": "2026-11-19", "实验内容": "协议修订：召回优先阈值、稳健 Z-Score、网格扩边、融合成员筛选",
+         "参数设置": "阈值改为 calib FPR≤8%（80% 安全裕度）内最大化 val 召回；Z-Score 换中位数/MAD；LOF 加 k=3,4；OCSVM 加 nu=0.005 与 gamma=0.002/0.005；马氏距离加 Ledoit-Wolf；融合按 val PR-AUC 取前三；housing 增至 10 种子",
          "结果": (f"Mahalanobis PR-AUC {mv('housing','Mahalanobis','pr_auc'):.4f}、"
                   f"Recall {mv('housing','Mahalanobis','recall'):.4f}、FPR {mv('housing','Mahalanobis','fpr'):.4f}；"
-                  f"融合 Recall {mv('housing','Rank-Ensemble','recall'):.4f}、FPR {mv('housing','Rank-Ensemble','fpr'):.4f}"),
-         "结论/下一步": "Mahalanobis 达标；融合提升召回但精确率略降；分析极端组合漏报"},
-        {"日期": "2026-11-18", "实验内容": "小样本对照：iris",
+                  f"融合 Recall {mv('housing','Rank-Ensemble','recall'):.4f}"),
+         "结论/下一步": "各模型召回整体提升且 FPR 仍受控；更新报告全部数值"},
+        {"日期": "2026-11-19", "实验内容": "小样本对照：iris",
          "参数设置": "145 行；10 种子；测试 44 行、注入 4 个异常（9.09%）",
          "结果": (f"LOF/One-Class SVM 平均 Recall {mv('iris','LOF','recall'):.3f}/"
                   f"{mv('iris','One-Class SVM','recall'):.3f}，FPR {mv('iris','LOF','fpr'):.3f}/"
                   f"{mv('iris','One-Class SVM','fpr'):.3f}；Mahalanobis FPR {mv('iris','Mahalanobis','fpr'):.3f}、"
                   f"Recall {mv('iris','Mahalanobis','recall'):.3f}"),
          "结论/下一步": "小样本下 FPR 方差大；不能只用单次划分下结论"},
-        {"日期": "2026-11-18", "实验内容": "参数敏感性",
-         "参数设置": "LOF k∈{5,10,15,20,30,50}；IForest max_samples；OCSVM nu×gamma；Mahalanobis support_fraction",
+        {"日期": "2026-11-19", "实验内容": "参数敏感性",
+         "参数设置": "LOF k∈{3,4,5,10,15,20,30,50}；IForest max_samples；OCSVM nu×gamma（8×7）；Mahalanobis support_fraction 与 Ledoit-Wolf；阈值分位 0.90–0.99",
          "结果": f"F1 极差：{sens_txt}",
          "结论/下一步": "LOF 对 k 最敏感；报告需给出推荐参数区间而非单点"},
-        {"日期": "2026-11-18", "实验内容": "参数调优对照：默认 / 交叉验证最优 / 交叉验证最差",
-         "参数设置": "同一测试集、同一阈值规则；网格 5/6/18/35 组；3 折交叉验证",
+        {"日期": "2026-11-19", "实验内容": "参数调优对照：默认 / 交叉验证最优 / 交叉验证最差",
+         "参数设置": "同一测试集、同一阈值规则；网格 6/8/18/56 组；3 折交叉验证",
          "结果": (f"One-Class SVM 默认 {pcp('One-Class SVM','默认参数'):.4f} → 最优 "
                   f"{pcp('One-Class SVM','交叉验证最优'):.4f}；马氏距离 {pcp('Mahalanobis','默认参数'):.4f} → "
                   f"{pcp('Mahalanobis','交叉验证最优'):.4f}；Isolation Forest "
                   f"{pcp('Isolation Forest','默认参数'):.4f} → {pcp('Isolation Forest','交叉验证最优'):.4f}"),
          "结论/下一步": "调参收益依赖方法；参数选错方向的代价大于不调"},
-        {"日期": "2026-11-18", "实验内容": "特征贡献与误差剖析",
-         "参数设置": "seed=42；Mahalanobis 距离分解；IForest 特征替换",
+        {"日期": "2026-11-19", "实验内容": "轴对齐消融：Isolation Forest 的 PCA 白化对照",
+         "参数设置": "同一测试集与调参协议；特征经 fit 集 PCA 白化（折内重新估计），白化前后各 10 种子",
+         "结果": (f"PR-AUC {ifpca_delta('pr_auc'):+.4f}、F1 {ifpca_delta('f1'):+.4f}、"
+                  f"Recall {ifpca_delta('recall'):+.4f}"),
+         "结论/下一步": "白化显著改善树模型，证实轴对齐切分是主因；可作为协同异常场景的备选方案"},
+        {"日期": "2026-11-19", "实验内容": "特征贡献与误差剖析",
+         "参数设置": "seed=42；Mahalanobis 距离分解；IForest 特征替换；稳健 Z-Score 逐字段尺度诊断",
          "结果": f"Mahalanobis 主要贡献 {top_mb_txt}；{err_n} 个错分案例",
          "结论/下一步": "自然极端房价样本是主要误报源；建议二次复核而非直接删除"},
-        {"日期": "2026-11-18", "实验内容": "报告生成与成果打包",
-         "参数设置": "python-docx 模板化生成；固定随机种子",
-         "结果": "Word 报告（含附录 A 代码片段）、14 幅图、结果表、ZIP 成果包",
+        {"日期": "2026-11-20", "实验内容": "报告生成与成果打包",
+         "参数设置": "python-docx 模板化生成；固定随机种子；Word 导出 PDF",
+         "结果": (f"Word 报告（含附录 A 代码片段）、"
+                  f"{len(list(FIG_DIR.glob('*.png')))} 幅图、结果表、ZIP 成果包"),
          "结论/下一步": "提交前复核字数、图表编号与数值一致性"},
     ]
     pd.DataFrame(log).to_csv(TABLE_DIR / "table_experiment_log.csv", index=False, encoding="utf-8-sig")

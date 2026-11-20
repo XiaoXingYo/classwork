@@ -7,6 +7,7 @@ def test_detectors_score_shapes():
     rng = np.random.default_rng(0)
     X = rng.normal(size=(120, 6))
     for name, params in [("Z-Score", {}), ("Mahalanobis", {"support_fraction": 0.75}),
+                         ("Mahalanobis", {"estimator": "ledoitwolf"}),
                          ("LOF", {"n_neighbors": 10}),
                          ("Isolation Forest", {"n_estimators": 50, "max_samples": 1.0, "max_features": 1.0}),
                          ("One-Class SVM", {"nu": 0.05, "gamma": "scale"})]:

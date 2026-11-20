@@ -22,3 +22,21 @@ def test_threshold_respects_calibration_fpr():
     tau, info = select_threshold(s_cal, s_val, y_val, max_fpr=0.10)
     assert info["cal_fpr"] <= 0.10 + 1e-12
     assert np.isfinite(tau)
+
+
+def test_threshold_prefers_recall_within_safety_budget():
+    """The usable budget is max_fpr * 0.8; inside it recall comes first."""
+    from detectors import threshold_candidates
+
+    rng = np.random.default_rng(1)
+    s_cal = rng.normal(size=200)
+    s_val = np.concatenate([rng.normal(size=40), rng.normal(loc=4, size=10)])
+    y_val = np.array([0] * 40 + [1] * 10)
+    tau, info = select_threshold(s_cal, s_val, y_val, max_fpr=0.10)
+    assert info["cal_fpr"] <= 0.08 + 1e-12
+    best_recall = max(
+        binary_metrics(y_val, s_val, t)["recall"]
+        for t in threshold_candidates(s_cal)
+        if np.mean(s_cal >= t) <= 0.08 + 1e-12
+    )
+    assert info["recall"] >= best_recall - 1e-12

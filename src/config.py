@@ -12,8 +12,8 @@ REPORT_DIR = ROOT / "report"
 for _p in (OUT_DIR, TABLE_DIR, FIG_DIR, LOG_DIR, REPORT_DIR):
     _p.mkdir(parents=True, exist_ok=True)
 
-SEEDS = [42, 2024, 7, 13, 99]
-IRIS_SEEDS = SEEDS + [2026, 11, 18, 123, 777]
+SEEDS = [42, 2024, 7, 13, 99, 2026, 11, 18, 123, 777]
+IRIS_SEEDS = list(SEEDS)
 
 IRIS_FEATURES = ["Sepal_Length", "Sepal_Width", "Petal_Length", "Petal_Width"]
 IRIS_LABEL = "Species"

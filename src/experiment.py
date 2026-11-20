@@ -9,14 +9,15 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+from sklearn.decomposition import PCA
 from sklearn.model_selection import KFold, train_test_split
 
 from config import (HOUSING_FEATURES, IRIS_FEATURES, IRIS_SEEDS, OUT_DIR, SEEDS,
                     TABLE_DIR)
 from data_loader import load_clean, run_audit
-from detectors import (IForestDetector, build_detector, cv_score, cv_select,
-                       default_grid, default_params, evaluate_params,
-                       select_threshold, tune_detector)
+from detectors import (build_detector, cv_score, cv_select, default_grid,
+                       default_params, evaluate_params, select_threshold,
+                       tune_detector)
 from evaluation import (aggregate_metrics, binary_metrics, per_type_recall,
                         score_metrics)
 from features import (add_features, feature_columns, fit_scaler, select_features,
@@ -104,7 +105,7 @@ def prepare_seed(dataset: str, seed: int, feature_mode: str = "engineered"):
     inj_cols = [c for c in base_cols if c not in ("CHAS", "RAD")] if dataset == "housing" else list(base_cols)
 
     n_test = _n_anomalies(len(raw["test"]), 0.10, 10 if dataset == "housing" else 4)
-    n_val = _n_anomalies(len(raw["val"]), 0.20, 10 if dataset == "housing" else 4)
+    n_val = _n_anomalies(len(raw["val"]), 0.10, 10 if dataset == "housing" else 4)
     test_inj = inject_anomalies(raw["test"], n_test, seed, inj_cols, stats, tag="test")
     val_inj = inject_anomalies(raw["val"], n_val, seed + 1000, inj_cols, stats, tag="val")
     folds = _build_cv_folds(seed, raw["fit"], stats, inj_cols)
@@ -178,10 +179,15 @@ def run_one_seed(dataset: str, seed: int, feature_mode: str = "engineered",
         tuned_models.append(tuned)
         curves[name] = s_test
 
-    # Rank-style ensemble over the five tuned detectors (z-score average).
-    cal_models = [m.model.score(X["cal"]) for m in tuned_models]
-    val_models = [m.model.score(X["val"]) for m in tuned_models]
-    test_models = [m.model.score(X["test"]) for m in tuned_models]
+    # Rank-style ensemble: keep the three detectors with the best val PR-AUC
+    # (member selection uses the validation split only), then average their
+    # calib-standardised z-scores.
+    order = np.argsort([-m.val_pr_auc for m in tuned_models])
+    keep = sorted(int(i) for i in order[:3])
+    members = [tuned_models[i].name for i in keep]
+    cal_models = [tuned_models[i].model.score(X["cal"]) for i in keep]
+    val_models = [tuned_models[i].model.score(X["val"]) for i in keep]
+    test_models = [tuned_models[i].model.score(X["test"]) for i in keep]
     cal_z, val_z, test_z = [], [], []
     for c, v, t in zip(cal_models, val_models, test_models):
         mu, sd = float(np.mean(c)), float(np.std(c, ddof=0))
@@ -199,11 +205,12 @@ def run_one_seed(dataset: str, seed: int, feature_mode: str = "engineered",
     ens_ptr = per_type_recall(p["test_injection"].manifest, ens_pred)
     records["Rank-Ensemble"] = {
         "method": "Rank-Ensemble",
-        "params": {"members": METHODS, "aggregation": "z-score mean"},
+        "params": {"members": members, "aggregation": "z-score mean",
+                   "selection": "top-3 by val PR-AUC"},
         "worst_params": {},
         "threshold": ens_tau,
-        "fit_seconds": sum(m.fit_seconds for m in tuned_models),
-        "score_seconds": sum(m.score_seconds for m in tuned_models),
+        "fit_seconds": sum(tuned_models[i].fit_seconds for i in keep),
+        "score_seconds": sum(tuned_models[i].score_seconds for i in keep),
         "val_f1": ens_sel["f1"],
         "val_recall": ens_sel["recall"],
         "val_cal_fpr": ens_sel["cal_fpr"],
@@ -291,7 +298,14 @@ def performance_table(results: Dict) -> pd.DataFrame:
 
 def _params_text(method: str, results: Dict) -> str:
     if method == "Rank-Ensemble":
-        return "五模型 z-score 等权平均"
+        recs = [s["methods"][method]["params"].get("members", [])
+                for s in results["per_seed"]]
+        counts = Counter("+".join(r) for r in recs)
+        top, n = counts.most_common(1)[0]
+        text = f"val PR-AUC 前三（{top}）z-score 平均"
+        if n < len(recs):
+            text += f"（{n}/{len(recs)} 种子）"
+        return text
     recs = [s["methods"][method]["params"] for s in results["per_seed"]]
     if not recs[0]:
         return "无超参数"
@@ -321,75 +335,70 @@ def per_type_table(results: Dict) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def run_feature_gain(dataset: str = "housing", seed: int = 42) -> pd.DataFrame:
-    """Base vs engineered, plus drop-one marginal contribution of each derived feature."""
+def run_feature_gain(dataset: str = "housing", seed: int = 42,
+                     carriers: Tuple[str, ...] = ("Isolation Forest", "Mahalanobis")
+                     ) -> pd.DataFrame:
+    """Base vs engineered feature sets for each carrier, plus drop-one contributions.
+
+    Two carriers are reported on purpose: a tree model and a squared-distance
+    model react to extra dimensions in opposite ways, so a single carrier cannot
+    decide whether the derived features are useful.
+    """
     p = prepare_seed(dataset, seed, "engineered")
     X, y_val, y_test = p["X"], p["y_val"], p["y_test"]
     base_cols = feature_columns(dataset, "base")
     eng_cols = feature_columns(dataset, "engineered")
     derived = [c for c in eng_cols if c not in base_cols]
+    fit_feat = add_features(p["raw"]["fit"], dataset)
 
-    def evaluate(cols: List[str], params: Optional[Dict] = None):
-        selected = select_features(add_features(p["raw"]["fit"], dataset), cols)
-        scaler = fit_scaler(add_features(p["raw"]["fit"], dataset)[selected], "robust")
-        Xf = transform(add_features(p["raw"]["fit"], dataset), scaler, selected)
+    def evaluate(cols: List[str], carrier: str, params: Optional[Dict] = None):
+        selected = select_features(fit_feat, cols)
+        scaler = fit_scaler(fit_feat[selected], "robust")
+        Xf = transform(fit_feat, scaler, selected)
         Xc = transform(add_features(p["raw"]["cal"], dataset), scaler, selected)
         Xv = transform(add_features(p["val_injection"].frame, dataset), scaler, selected)
         Xt = transform(add_features(p["test_injection"].frame, dataset), scaler, selected)
         if params is None:
-            tuned = tune_detector("Isolation Forest", Xf, Xc, Xv, y_val,
-                                  dataset, seed,
-                                  grid=default_grid(dataset, "Isolation Forest"),
+            tuned = tune_detector(carrier, Xf, Xc, Xv, y_val, dataset, seed,
+                                  grid=default_grid(dataset, carrier),
                                   folds=_fold_matrices(p, selected))
-            model, tau = tuned.model, tuned.threshold
-            val_f1, val_pr = tuned.val_metrics["f1"], tuned.val_pr_auc
+            model, tau, chosen = tuned.model, tuned.threshold, tuned.params
         else:
-            model = IForestDetector(random_state=seed, **params).fit(Xf)
-            s_c, s_v = model.score(Xc), model.score(Xv)
-            tau, sel = select_threshold(s_c, s_v, y_val)
-            val_f1, val_pr = sel["f1"], score_metrics(y_val, s_v)["pr_auc"]
+            model = build_detector(carrier, params, seed).fit(Xf)
+            tau, _ = select_threshold(model.score(Xc), model.score(Xv), y_val)
+            chosen = dict(params)
         s_t = model.score(Xt)
         tm = binary_metrics(y_test, s_t, tau)
         sm = score_metrics(y_test, s_t)
         return {
-            "n_features": len(selected), "val_f1": val_f1, "val_pr_auc": val_pr,
-            "pr_auc": sm["pr_auc"], "recall": tm["recall"], "f1": tm["f1"],
-            "fpr": tm["fpr"], "threshold": tau, "model": model, "selected": selected,
+            "n_features": len(selected), "pr_auc": sm["pr_auc"],
+            "recall": tm["recall"], "f1": tm["f1"], "fpr": tm["fpr"],
+            "params": chosen, "selected": selected,
         }
 
-    base = evaluate(base_cols)
-    full = evaluate(eng_cols)
-    full_params = {k: v for k, v in full.get("params", {}).items()} if "params" in full else None
-    # Use the tuned full-set parameters for the drop-one comparison.
-    # Recover them from the model object when available.
-    if hasattr(full["model"], "n_estimators"):
-        full_params = {
-            "n_estimators": full["model"].n_estimators,
-            "max_samples": full["model"].max_samples,
-            "max_features": full["model"].max_features,
-        }
-    else:
-        full_params = {"n_estimators": 200, "max_samples": 1.0, "max_features": 1.0}
-
-    rows = [{
-        "特征集": "基础特征", "特征数": base["n_features"],
-        "PR-AUC": base["pr_auc"], "Recall": base["recall"], "F1": base["f1"],
-        "FPR": base["fpr"], "说明": "原始字段",
-    }, {
-        "特征集": "工程特征", "特征数": full["n_features"],
-        "PR-AUC": full["pr_auc"], "Recall": full["recall"], "F1": full["f1"],
-        "FPR": full["fpr"], "说明": "原始字段+派生特征",
-    }]
-    for f in derived:
-        if f not in full["selected"]:
-            continue
-        cols = [c for c in full["selected"] if c != f]
-        r = evaluate(cols, params=full_params)
-        rows.append({
-            "特征集": f"去掉 {f}", "特征数": r["n_features"],
-            "PR-AUC": r["pr_auc"], "Recall": r["recall"], "F1": r["f1"],
-            "FPR": r["fpr"], "说明": f"边际贡献 ΔPR-AUC={full['pr_auc'] - r['pr_auc']:+.4f}",
-        })
+    rows = []
+    for carrier in carriers:
+        base = evaluate(base_cols, carrier)
+        full = evaluate(eng_cols, carrier)
+        rows += [
+            {"载体": carrier, "特征集": "基础特征", "特征数": base["n_features"],
+             "PR-AUC": base["pr_auc"], "Recall": base["recall"], "F1": base["f1"],
+             "FPR": base["fpr"], "说明": "原始字段"},
+            {"载体": carrier, "特征集": "工程特征", "特征数": full["n_features"],
+             "PR-AUC": full["pr_auc"], "Recall": full["recall"], "F1": full["f1"],
+             "FPR": full["fpr"], "说明": "原始字段+派生特征"},
+        ]
+        for f in derived:
+            if f not in full["selected"]:
+                continue
+            r = evaluate([c for c in full["selected"] if c != f], carrier,
+                         params=full["params"])
+            rows.append({
+                "载体": carrier, "特征集": f"工程特征 − {f}", "特征数": r["n_features"],
+                "PR-AUC": r["pr_auc"], "Recall": r["recall"], "F1": r["f1"],
+                "FPR": r["fpr"],
+                "说明": f"边际贡献 ΔPR-AUC={full['pr_auc'] - r['pr_auc']:+.4f}",
+            })
     return pd.DataFrame(rows)
 
 
@@ -406,7 +415,7 @@ def run_sensitivity(dataset: str = "housing", seed: int = 42) -> Tuple[pd.DataFr
                      "threshold_quantile": q, "pr_auc": score_metrics(y_test, s_test)["pr_auc"],
                      "f1": tm["f1"], "recall": tm["recall"], "fpr": tm["fpr"]})
 
-    for k in (5, 10, 15, 20, 30, 50):
+    for k in (3, 4, 5, 10, 15, 20, 30, 50):
         if k >= len(X["fit"]):
             continue
         m = build_detector("LOF", {"n_neighbors": k}, seed).fit(X["fit"])
@@ -422,8 +431,8 @@ def run_sensitivity(dataset: str = "housing", seed: int = 42) -> Tuple[pd.DataFr
         for q in qs:
             add("Isolation Forest", "max_samples", ms, q, s_cal, s_test)
 
-    for nu in (0.01, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7):
-        for gamma in ("scale", 0.01, 0.05, 0.1, 0.5):
+    for nu in (0.005, 0.01, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7):
+        for gamma in ("scale", 0.002, 0.005, 0.01, 0.05, 0.1, 0.5):
             m = build_detector("One-Class SVM", {"nu": nu, "gamma": gamma}, seed).fit(X["fit"])
             s_cal, s_test = m.score(X["cal"]), m.score(X["test"])
             add("One-Class SVM", "gamma", f"nu={nu},gamma={gamma}", 0.95, s_cal, s_test)
@@ -433,6 +442,11 @@ def run_sensitivity(dataset: str = "housing", seed: int = 42) -> Tuple[pd.DataFr
         s_cal, s_test = m.score(X["cal"]), m.score(X["test"])
         for q in qs:
             add("Mahalanobis", "support_fraction", sf, q, s_cal, s_test)
+
+    m = build_detector("Mahalanobis", {"estimator": "ledoitwolf"}, seed).fit(X["fit"])
+    s_cal, s_test = m.score(X["cal"]), m.score(X["test"])
+    for q in qs:
+        add("Mahalanobis", "support_fraction", "Ledoit-Wolf", q, s_cal, s_test)
 
     m = build_detector("Z-Score", {}, seed).fit(X["fit"])
     s_cal, s_test = m.score(X["cal"]), m.score(X["test"])
@@ -534,6 +548,72 @@ def param_compare_table(raw: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(out)
 
 
+def _whiten_matrices(X: Dict[str, np.ndarray], folds: List[Dict], seed: int):
+    """PCA-whiten split matrices (fitted on fit) and CV folds (fitted per fold)."""
+    pca = PCA(whiten=True, random_state=seed).fit(X["fit"])
+    Xw = {k: pca.transform(v) for k, v in X.items()}
+    folds_w = []
+    for f in folds:
+        fw = PCA(whiten=True, random_state=seed).fit(f["X_train"])
+        folds_w.append({
+            "X_train": fw.transform(f["X_train"]),
+            "X_cal": fw.transform(f["X_cal"]),
+            "X_hold": fw.transform(f["X_hold"]),
+            "y_hold": f["y_hold"],
+        })
+    return Xw, folds_w
+
+
+def run_if_pca_ablation(dataset: str = "housing",
+                        seeds: Optional[List[int]] = None) -> pd.DataFrame:
+    """Isolation Forest on the scaled features vs PCA-whitened features.
+
+    Whitening rotates the axes onto the correlation directions, so axis-aligned
+    splits regain access to joint shifts; the ablation tests whether the
+    axis-alignment limitation explains the weak Isolation Forest ranking.
+    """
+    seeds = seeds or (IRIS_SEEDS if dataset == "iris" else SEEDS)
+    rows = []
+    for seed in seeds:
+        p = prepare_seed(dataset, seed, "engineered")
+        X, y_val, y_test = p["X"], p["y_val"], p["y_test"]
+        folds = _fold_matrices(p)
+        variants = {"原始特征": (X, folds)}
+        variants["PCA 白化特征"] = _whiten_matrices(X, folds, seed)
+        for variant, (Xv, fv) in variants.items():
+            tuned = tune_detector("Isolation Forest", Xv["fit"], Xv["cal"],
+                                  Xv["val"], y_val, dataset, seed, folds=fv)
+            s_test = tuned.model.score(Xv["test"])
+            tm = binary_metrics(y_test, s_test, tuned.threshold)
+            sm = score_metrics(y_test, s_test)
+            rows.append({
+                "dataset": dataset, "seed": seed, "variant": variant,
+                "params": _short_params(tuned.params),
+                "recall": tm["recall"], "precision": tm["precision"],
+                "f1": tm["f1"], "fpr": tm["fpr"], "pr_auc": sm["pr_auc"],
+            })
+    return pd.DataFrame(rows)
+
+
+def if_pca_table(raw: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate the PCA ablation over seeds for the report."""
+    out = []
+    for variant, grp in raw.groupby("variant"):
+        counts = Counter(grp["params"])
+        params, n = counts.most_common(1)[0]
+        if n < len(grp):
+            params = f"{params}（{n}/{len(grp)} 种子）"
+        out.append({
+            "特征": variant, "主要参数": params,
+            "PR-AUC": f"{grp['pr_auc'].mean():.4f}±{grp['pr_auc'].std(ddof=1):.4f}",
+            "Recall": f"{grp['recall'].mean():.4f}±{grp['recall'].std(ddof=1):.4f}",
+            "F1": f"{grp['f1'].mean():.4f}±{grp['f1'].std(ddof=1):.4f}",
+            "FPR": f"{grp['fpr'].mean():.4f}±{grp['fpr'].std(ddof=1):.4f}",
+        })
+    order = {"原始特征": 0, "PCA 白化特征": 1}
+    return pd.DataFrame(out).sort_values("特征", key=lambda s: s.map(order))
+
+
 def param_stability_table(results: Dict) -> pd.DataFrame:
     """Per-seed record of the CV-selected setting, for the appendix."""
     rows = []
@@ -587,6 +667,13 @@ def run_main() -> Dict:
                                        index=False, encoding="utf-8-sig")
     param_stability_table(all_results["housing"]).to_csv(
         TABLE_DIR / "table_param_stability.csv", index=False, encoding="utf-8-sig")
+
+    # Axis-alignment ablation: Isolation Forest on PCA-whitened features.
+    ifpca_raw = run_if_pca_ablation("housing", SEEDS)
+    ifpca_raw.to_csv(TABLE_DIR / "table_if_pca_raw.csv", index=False,
+                     encoding="utf-8-sig")
+    if_pca_table(ifpca_raw).to_csv(TABLE_DIR / "table_if_pca.csv", index=False,
+                                   encoding="utf-8-sig")
 
     # Injection configuration table.
     inj_rows = []

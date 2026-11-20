@@ -203,7 +203,8 @@ def fig_recall_fpr():
     ax2.axhline(0.10, color="#8172B3", ls=":", lw=1.3, label="FPR 目标 0.10")
     ax2.set_ylabel("假阳性率 FPR"); ax2.set_ylim(0, 0.18)
     ax1.set_xticks(x); ax1.set_xticklabels(methods, rotation=15)
-    ax1.set_title("housing：5 个随机种子的 Recall 与 FPR（均值±标准差）")
+    n_seeds = len(m["housing"]["per_seed"])
+    ax1.set_title(f"housing：{n_seeds} 个随机种子的 Recall 与 FPR（均值±标准差）")
     h1, l1 = ax1.get_legend_handles_labels(); h2, l2 = ax2.get_legend_handles_labels()
     ax1.legend(h1 + h2, l1 + l2, frameon=False, fontsize=8, loc="upper center",
                bbox_to_anchor=(0.5, -0.18), ncol=4)

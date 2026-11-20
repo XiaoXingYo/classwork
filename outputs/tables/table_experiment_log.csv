@@ -1,8 +1,10 @@
 ﻿日期,实验内容,参数设置,结果,结论/下一步
 2026-11-18,数据审计与清洗,iris 缺失按 Species 中位数；连续缺失≥3 行删除；完全重复删除,iris 152→145 行；housing 506 行；缺失 13 格（1.71%）、重复 5 行（3.29%）,两份数据可用；housing 自然长尾保留，不当作错误
-2026-11-18,主实验：5 类检测器 + 融合,housing 70/15/15 训练内划分 + 30% 测试；5 种子；训练集内 3 折 CV 选参；测试注入 15 个异常（9.87%）,Mahalanobis PR-AUC 0.9026、Recall 0.8933、FPR 0.0204；融合 Recall 0.9333、FPR 0.0350,Mahalanobis 达标；融合提升召回但精确率略降；分析极端组合漏报
-2026-11-18,小样本对照：iris,145 行；10 种子；测试 44 行、注入 4 个异常（9.09%）,LOF/One-Class SVM 平均 Recall 0.925/0.975，FPR 0.113/0.125；Mahalanobis FPR 0.090、Recall 0.825,小样本下 FPR 方差大；不能只用单次划分下结论
-2026-11-18,参数敏感性,"LOF k∈{5,10,15,20,30,50}；IForest max_samples；OCSVM nu×gamma；Mahalanobis support_fraction",F1 极差：LOF 0.566；Mahalanobis 0.455；One-Class SVM 0.344；Isolation Forest 0.210；Z-Score 0.100,LOF 对 k 最敏感；报告需给出推荐参数区间而非单点
-2026-11-18,参数调优对照：默认 / 交叉验证最优 / 交叉验证最差,同一测试集、同一阈值规则；网格 5/6/18/35 组；3 折交叉验证,One-Class SVM 默认 0.4510 → 最优 0.7504；马氏距离 0.8563 → 0.8563；Isolation Forest 0.4697 → 0.4299,调参收益依赖方法；参数选错方向的代价大于不调
-2026-11-18,特征贡献与误差剖析,seed=42；Mahalanobis 距离分解；IForest 特征替换,Mahalanobis 主要贡献 NOX 21.3%、TAX 13.7%、CRIM 7.5%；6 个错分案例,自然极端房价样本是主要误报源；建议二次复核而非直接删除
-2026-11-18,报告生成与成果打包,python-docx 模板化生成；固定随机种子,Word 报告（含附录 A 代码片段）、14 幅图、结果表、ZIP 成果包,提交前复核字数、图表编号与数值一致性
+2026-11-18,主实验：5 类检测器 + 融合（初版协议：最大化 val F1）,housing 70/15/15 训练内划分 + 30% 测试；5 种子；训练集内 3 折 CV 选参；测试注入 15 个异常（9.87%）,Mahalanobis PR-AUC 0.9026、Recall 0.8933、FPR 0.0204；融合 Recall 0.9333、FPR 0.0350,Mahalanobis 达标但 FPR 预算未用尽；改为召回优先阈值并扩充网格
+2026-11-19,协议修订：召回优先阈值、稳健 Z-Score、网格扩边、融合成员筛选,"阈值改为 calib FPR≤8%（80% 安全裕度）内最大化 val 召回；Z-Score 换中位数/MAD；LOF 加 k=3,4；OCSVM 加 nu=0.005 与 gamma=0.002/0.005；马氏距离加 Ledoit-Wolf；融合按 val PR-AUC 取前三；housing 增至 10 种子",Mahalanobis PR-AUC 0.8866、Recall 0.9667、FPR 0.0511；融合 Recall 0.9333,各模型召回整体提升且 FPR 仍受控；更新报告全部数值
+2026-11-19,小样本对照：iris,145 行；10 种子；测试 44 行、注入 4 个异常（9.09%）,LOF/One-Class SVM 平均 Recall 0.925/1.000，FPR 0.125/0.138；Mahalanobis FPR 0.120、Recall 0.850,小样本下 FPR 方差大；不能只用单次划分下结论
+2026-11-19,参数敏感性,"LOF k∈{3,4,5,10,15,20,30,50}；IForest max_samples；OCSVM nu×gamma（8×7）；Mahalanobis support_fraction 与 Ledoit-Wolf；阈值分位 0.90–0.99",F1 极差：LOF 0.566；Mahalanobis 0.455；One-Class SVM 0.344；Isolation Forest 0.210；Z-Score 0.127,LOF 对 k 最敏感；报告需给出推荐参数区间而非单点
+2026-11-19,参数调优对照：默认 / 交叉验证最优 / 交叉验证最差,同一测试集、同一阈值规则；网格 6/8/18/56 组；3 折交叉验证,One-Class SVM 默认 0.4118 → 最优 0.6723；马氏距离 0.7915 → 0.7991；Isolation Forest 0.3909 → 0.3801,调参收益依赖方法；参数选错方向的代价大于不调
+2026-11-19,轴对齐消融：Isolation Forest 的 PCA 白化对照,同一测试集与调参协议；特征经 fit 集 PCA 白化（折内重新估计），白化前后各 10 种子,PR-AUC +0.3432、F1 +0.3309、Recall +0.5067,白化显著改善树模型，证实轴对齐切分是主因；可作为协同异常场景的备选方案
+2026-11-19,特征贡献与误差剖析,seed=42；Mahalanobis 距离分解；IForest 特征替换；稳健 Z-Score 逐字段尺度诊断,Mahalanobis 主要贡献 NOX 18.0%、TAX 13.2%、RM 12.6%；8 个错分案例,自然极端房价样本是主要误报源；建议二次复核而非直接删除
+2026-11-20,报告生成与成果打包,python-docx 模板化生成；固定随机种子；Word 导出 PDF,Word 报告（含附录 A 代码片段）、15 幅图、结果表、ZIP 成果包,提交前复核字数、图表编号与数值一致性

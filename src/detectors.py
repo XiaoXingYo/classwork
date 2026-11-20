@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
-from sklearn.covariance import EmpiricalCovariance, MinCovDet
+from sklearn.covariance import EmpiricalCovariance, LedoitWolf, MinCovDet
 from sklearn.ensemble import IsolationForest
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.svm import OneClassSVM
@@ -25,11 +25,13 @@ class BaseDetector:
 
 
 class ZScoreDetector(BaseDetector):
+    """Robust univariate z-score: median / MAD are not dragged by long tails."""
+
     name = "Z-Score"
 
     def fit(self, X: np.ndarray) -> "ZScoreDetector":
-        self.mu = np.mean(X, axis=0)
-        self.sd = np.std(X, axis=0, ddof=0)
+        self.mu = np.median(X, axis=0)
+        self.sd = np.median(np.abs(X - self.mu), axis=0) * 1.4826
         self.sd[self.sd < 1e-12] = 1.0
         return self
 
@@ -40,9 +42,11 @@ class ZScoreDetector(BaseDetector):
 class MahalanobisDetector(BaseDetector):
     name = "Mahalanobis"
 
-    def __init__(self, support_fraction: float = 0.75, random_state: int = 42):
+    def __init__(self, support_fraction: float = 0.75, random_state: int = 42,
+                 estimator: Optional[str] = None):
         self.support_fraction = float(support_fraction)
         self.random_state = random_state
+        self.estimator_name = estimator
 
     def fit(self, X: np.ndarray) -> "MahalanobisDetector":
         self.estimator = None
@@ -51,7 +55,9 @@ class MahalanobisDetector(BaseDetector):
         cov = np.atleast_2d(cov) + np.eye(X.shape[1]) * 1e-6
         self._prec = np.linalg.pinv(cov)
         try:
-            if self.support_fraction >= 0.999:
+            if self.estimator_name == "ledoitwolf":
+                self.estimator = LedoitWolf().fit(X)
+            elif self.support_fraction >= 0.999:
                 self.estimator = EmpiricalCovariance().fit(X)
             else:
                 self.estimator = MinCovDet(
@@ -137,7 +143,8 @@ def build_detector(name: str, params: Dict, seed: int) -> BaseDetector:
         return ZScoreDetector()
     if name == "Mahalanobis":
         return MahalanobisDetector(support_fraction=params.get("support_fraction", 0.75),
-                                   random_state=seed)
+                                   random_state=seed,
+                                   estimator=params.get("estimator"))
     if name == "LOF":
         return LOFDetector(n_neighbors=params.get("n_neighbors", 20))
     if name == "Isolation Forest":
@@ -156,9 +163,10 @@ def default_grid(dataset: str, name: str) -> List[Dict]:
     if name == "Z-Score":
         return [{}]
     if name == "Mahalanobis":
-        return [{"support_fraction": v} for v in (0.5, 0.6, 0.75, 0.9, 1.0)]
+        grid = [{"support_fraction": v} for v in (0.5, 0.6, 0.75, 0.9, 1.0)]
+        return grid + [{"estimator": "ledoitwolf"}]
     if name == "LOF":
-        ks = (5, 10, 15, 20, 30, 50) if dataset == "housing" else (3, 5, 8, 10, 15, 20)
+        ks = (3, 4, 5, 10, 15, 20, 30, 50) if dataset == "housing" else (3, 5, 8, 10, 15, 20)
         return [{"n_neighbors": k} for k in ks]
     if name == "Isolation Forest":
         if dataset == "iris":
@@ -170,8 +178,8 @@ def default_grid(dataset: str, name: str) -> List[Dict]:
         return [{"n_estimators": n, "max_samples": s, "max_features": f}
                 for n in (100, 200, 300) for s in samples for f in features]
     if name == "One-Class SVM":
-        nus = (0.01, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7)
-        gammas = ("scale", 0.01, 0.05, 0.1, 0.5)
+        nus = (0.005, 0.01, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7)
+        gammas = ("scale", 0.002, 0.005, 0.01, 0.05, 0.1, 0.5)
         return [{"nu": n, "gamma": g} for n in nus for g in gammas]
     raise ValueError(name)
 
@@ -195,35 +203,42 @@ def default_params(name: str) -> Dict:
 
 def threshold_candidates(s_cal: np.ndarray) -> np.ndarray:
     s = np.asarray(s_cal, dtype=float)
-    qs = np.linspace(0.80, 0.995, 40)
-    taus = np.unique(np.quantile(s, qs))
-    taus = taus[np.isfinite(taus)]
-    if len(taus) == 0:
+    s = s[np.isfinite(s)]
+    if len(s) == 0:
         return np.array([0.0])
-    return taus
+    qs = np.linspace(0.80, 0.995, 60)
+    taus = np.unique(np.concatenate([np.quantile(s, qs), s]))
+    return taus[np.isfinite(taus)]
 
 
 def select_threshold(s_cal: np.ndarray, s_val: np.ndarray,
-                     y_val: np.ndarray, max_fpr: float = 0.10) -> Tuple[float, Dict]:
+                     y_val: np.ndarray, max_fpr: float = 0.10,
+                     safety: float = 0.8) -> Tuple[float, Dict]:
     """Choose a threshold on normal calibration scores, constrained by FPR.
 
-    Validation anomalies are synthetic and independent from the test injection;
-    the test labels are never used here.
+    The usable FPR budget is ``max_fpr * safety`` (a 20% safety margin against
+    calib-to-test sampling noise). Among the feasible thresholds the one with
+    the highest validation recall wins; ties are broken by F1, then by the
+    lower calibration FPR. Validation anomalies are synthetic and independent
+    from the test injection; the test labels are never used here.
     """
+    budget = max_fpr * safety
     best = None
+    fallback = None
     for tau in threshold_candidates(s_cal):
         cal_fpr = float(np.mean(s_cal >= tau))
-        if cal_fpr > max_fpr + 1e-12:
+        if fallback is None or cal_fpr < fallback[1]:
+            fallback = (float(tau), cal_fpr)
+        if cal_fpr > budget + 1e-12:
             continue
         m = binary_metrics(y_val, s_val, tau)
-        key = (m["f1"], m["recall"], -cal_fpr, m["precision"])
+        key = (m["recall"], m["f1"], -cal_fpr, m["precision"])
         if best is None or key > best[0]:
             best = (key, float(tau), m, cal_fpr)
     if best is None:
-        tau = float(np.quantile(s_cal, 0.90))
+        tau, cal_fpr = fallback
         m = binary_metrics(y_val, s_val, tau)
-        best = ((m["f1"], m["recall"], -1.0, m["precision"]), tau, m,
-                float(np.mean(s_cal >= tau)))
+        best = ((m["recall"], m["f1"], -cal_fpr, m["precision"]), tau, m, cal_fpr)
     _, tau, m, cal_fpr = best
     return tau, {"cal_fpr": cal_fpr, **m}
 

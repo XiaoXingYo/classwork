@@ -2,151 +2,130 @@
   "mahalanobis": [
     {
       "feature": "NOX",
-      "mean_contribution": 27.210420950929016,
-      "mean_share": 0.2125531667023706,
+      "mean_contribution": 22.60073086037995,
+      "mean_share": 0.17951373354981986,
       "method": "Mahalanobis"
     },
     {
       "feature": "TAX",
-      "mean_contribution": 18.686706168783918,
-      "mean_share": 0.13707556413792057,
-      "method": "Mahalanobis"
-    },
-    {
-      "feature": "CRIM",
-      "mean_contribution": 10.939827213290862,
-      "mean_share": 0.07480996603460995,
+      "mean_contribution": 16.392247959080443,
+      "mean_share": 0.13205377200447754,
       "method": "Mahalanobis"
     },
     {
       "feature": "RM",
-      "mean_contribution": 10.203825332384303,
-      "mean_share": 0.12786762883943908,
+      "mean_contribution": 9.211296048555397,
+      "mean_share": 0.12587657747491496,
+      "method": "Mahalanobis"
+    },
+    {
+      "feature": "CRIM",
+      "mean_contribution": 9.072762989010704,
+      "mean_share": 0.06255142416534908,
       "method": "Mahalanobis"
     },
     {
       "feature": "DIS",
-      "mean_contribution": 9.611971928411243,
-      "mean_share": 0.0898360177071405,
+      "mean_contribution": 8.48851538274227,
+      "mean_share": 0.08488231021106145,
       "method": "Mahalanobis"
     },
     {
       "feature": "B",
-      "mean_contribution": 7.798042107108881,
-      "mean_share": 0.06799772185772975,
+      "mean_contribution": 6.441860871089944,
+      "mean_share": 0.056172031099863705,
       "method": "Mahalanobis"
     },
     {
       "feature": "ZN",
-      "mean_contribution": 4.935942922929727,
-      "mean_share": 0.03636404435354034,
+      "mean_contribution": 4.754634805444261,
+      "mean_share": 0.043620679695109466,
       "method": "Mahalanobis"
     },
     {
       "feature": "INDUS",
-      "mean_contribution": 4.407855224679138,
-      "mean_share": 0.06132401977086406,
+      "mean_contribution": 4.65198336774145,
+      "mean_share": 0.07030521014490158,
       "method": "Mahalanobis"
     },
     {
       "feature": "LSTAT",
-      "mean_contribution": 4.38654414877911,
-      "mean_share": 0.04365345924306008,
+      "mean_contribution": 4.0294753689504175,
+      "mean_share": 0.046876827838960015,
       "method": "Mahalanobis"
     },
     {
       "feature": "CRIM_log",
-      "mean_contribution": 3.8812506056508123,
-      "mean_share": 0.045297282068695745,
+      "mean_contribution": 3.734268421171868,
+      "mean_share": 0.04935829489988618,
       "method": "Mahalanobis"
     }
   ],
   "iforest": [
     {
       "feature": "B",
-      "mean_contribution": 0.027221770865594953,
-      "mean_share": 0.34572281033147667,
+      "mean_contribution": 0.0207564283804787,
+      "mean_share": 0.2802819330830585,
       "method": "Isolation Forest"
     },
     {
       "feature": "RM",
-      "mean_contribution": 0.014722119194500791,
-      "mean_share": 0.18697433194512153,
+      "mean_contribution": 0.01150890627062473,
+      "mean_share": 0.15540913099655532,
       "method": "Isolation Forest"
     },
     {
       "feature": "ZN",
-      "mean_contribution": 0.009468621538692622,
-      "mean_share": 0.12025369196165331,
-      "method": "Isolation Forest"
-    },
-    {
-      "feature": "TAX_RAD",
-      "mean_contribution": 0.005070796180873755,
-      "mean_share": 0.06440028883225553,
+      "mean_contribution": 0.008666531023634275,
+      "mean_share": 0.11702745886248139,
       "method": "Isolation Forest"
     },
     {
       "feature": "CHAS",
-      "mean_contribution": 0.005008361160591843,
-      "mean_share": 0.06360734957854053,
+      "mean_contribution": 0.007161304900291608,
+      "mean_share": 0.09670181902483072,
       "method": "Isolation Forest"
     },
     {
       "feature": "LSTAT",
-      "mean_contribution": 0.004987814447183957,
-      "mean_share": 0.06334640154773377,
+      "mean_contribution": 0.007115750134859902,
+      "mean_share": 0.09608667573127871,
+      "method": "Isolation Forest"
+    },
+    {
+      "feature": "TAX_RAD",
+      "mean_contribution": 0.004640513300151064,
+      "mean_share": 0.06266261297089239,
       "method": "Isolation Forest"
     },
     {
       "feature": "CRIM",
-      "mean_contribution": 0.004802792910022139,
-      "mean_share": 0.06099658506756206,
-      "method": "Isolation Forest"
-    },
-    {
-      "feature": "NOX",
-      "mean_contribution": 0.0024692061235860436,
-      "mean_share": 0.03135949106870131,
+      "mean_contribution": 0.004386863701795522,
+      "mean_share": 0.05923748614031996,
       "method": "Isolation Forest"
     },
     {
       "feature": "TAX",
-      "mean_contribution": 0.002241891291592328,
-      "mean_share": 0.028472539924526467,
+      "mean_contribution": 0.004215986151338724,
+      "mean_share": 0.05693006169886002,
       "method": "Isolation Forest"
     },
     {
-      "feature": "INDUS",
-      "mean_contribution": 0.0017880881944725498,
-      "mean_share": 0.02270913522730789,
+      "feature": "PTRATIO",
+      "mean_contribution": 0.0028919948082513107,
+      "mean_share": 0.03905170390900134,
+      "method": "Isolation Forest"
+    },
+    {
+      "feature": "NOX",
+      "mean_contribution": 0.001144971121320161,
+      "mean_share": 0.015460979766138873,
       "method": "Isolation Forest"
     }
   ],
-  "n_detected": 19,
-  "threshold": 6.279190840932827,
+  "n_detected": 23,
+  "threshold": 5.457662068953373,
   "errors": [
-    {
-      "row_position": 29,
-      "original_index": 29,
-      "label": 1,
-      "prediction": 0,
-      "error_type": "漏报(FN)",
-      "injection_type": "extreme",
-      "score": 5.826713448613969,
-      "threshold": 6.279190840932827,
-      "CRIM": 0.26838,
-      "ZN": 0.0,
-      "INDUS": 9.69,
-      "RM": 4.249823647531761,
-      "AGE": 70.6,
-      "DIS": 2.8927,
-      "TAX": 391.0,
-      "PTRATIO": 12.775147811532547,
-      "LSTAT": 14.1,
-      "MEDV": 18.3,
-      "margin": 0.4524773923188583
-    },
     {
       "row_position": 94,
       "original_index": -1,
@@ -155,7 +134,7 @@
       "error_type": "误报(FP)",
       "injection_type": "normal",
       "score": 7.181423210476278,
-      "threshold": 6.279190840932827,
+      "threshold": 5.457662068953373,
       "CRIM": 4.55587,
       "ZN": 0.0,
       "INDUS": 18.1,
@@ -166,7 +145,7 @@
       "PTRATIO": 20.2,
       "LSTAT": 7.12,
       "MEDV": 27.5,
-      "margin": 0.9022323695434507
+      "margin": 1.723761141522905
     },
     {
       "row_position": 128,
@@ -176,7 +155,7 @@
       "error_type": "误报(FP)",
       "injection_type": "normal",
       "score": 6.794380910111555,
-      "threshold": 6.279190840932827,
+      "threshold": 5.457662068953373,
       "CRIM": 3.53501,
       "ZN": 0.0,
       "INDUS": 19.58,
@@ -187,7 +166,7 @@
       "PTRATIO": 14.7,
       "LSTAT": 15.02,
       "MEDV": 15.6,
-      "margin": 0.5151900691787281
+      "margin": 1.3367188411581825
     },
     {
       "row_position": 79,
@@ -197,7 +176,7 @@
       "error_type": "误报(FP)",
       "injection_type": "normal",
       "score": 6.498504051763791,
-      "threshold": 6.279190840932827,
+      "threshold": 5.457662068953373,
       "CRIM": 0.18337,
       "ZN": 0.0,
       "INDUS": 27.74,
@@ -208,7 +187,7 @@
       "PTRATIO": 20.1,
       "LSTAT": 23.97,
       "MEDV": 7.0,
-      "margin": 0.2193132108309639
+      "margin": 1.0408419828104183
     },
     {
       "row_position": 2,
@@ -218,7 +197,7 @@
       "error_type": "误报(FP)",
       "injection_type": "normal",
       "score": 6.48217259776609,
-      "threshold": 6.279190840932827,
+      "threshold": 5.457662068953373,
       "CRIM": 0.10574,
       "ZN": 0.0,
       "INDUS": 27.74,
@@ -229,7 +208,7 @@
       "PTRATIO": 20.1,
       "LSTAT": 18.07,
       "MEDV": 13.6,
-      "margin": 0.20298175683326303
+      "margin": 1.0245105288127174
     },
     {
       "row_position": 130,
@@ -239,7 +218,7 @@
       "error_type": "误报(FP)",
       "injection_type": "normal",
       "score": 6.327391765192328,
-      "threshold": 6.279190840932827,
+      "threshold": 5.457662068953373,
       "CRIM": 0.38735,
       "ZN": 0.0,
       "INDUS": 25.65,
@@ -250,7 +229,70 @@
       "PTRATIO": 19.1,
       "LSTAT": 27.26,
       "MEDV": 15.7,
-      "margin": 0.04820092425950051
+      "margin": 0.8697296962389549
+    },
+    {
+      "row_position": 73,
+      "original_index": -1,
+      "label": 0,
+      "prediction": 1,
+      "error_type": "误报(FP)",
+      "injection_type": "normal",
+      "score": 5.9764471455453325,
+      "threshold": 5.457662068953373,
+      "CRIM": 0.10659,
+      "ZN": 80.0,
+      "INDUS": 1.91,
+      "RM": 5.936,
+      "AGE": 19.5,
+      "DIS": 10.5857,
+      "TAX": 334.0,
+      "PTRATIO": 22.0,
+      "LSTAT": 5.57,
+      "MEDV": 20.6,
+      "margin": 0.5187850765919597
+    },
+    {
+      "row_position": 16,
+      "original_index": -1,
+      "label": 0,
+      "prediction": 1,
+      "error_type": "误报(FP)",
+      "injection_type": "normal",
+      "score": 5.910553575305845,
+      "threshold": 5.457662068953373,
+      "CRIM": 0.09849,
+      "ZN": 0.0,
+      "INDUS": 25.65,
+      "RM": 5.879,
+      "AGE": 95.8,
+      "DIS": 2.0063,
+      "TAX": 188.0,
+      "PTRATIO": 19.1,
+      "LSTAT": 17.58,
+      "MEDV": 18.8,
+      "margin": 0.4528915063524721
+    },
+    {
+      "row_position": 65,
+      "original_index": -1,
+      "label": 0,
+      "prediction": 1,
+      "error_type": "误报(FP)",
+      "injection_type": "normal",
+      "score": 5.5638820489042455,
+      "threshold": 5.457662068953373,
+      "CRIM": 0.43571,
+      "ZN": 0.0,
+      "INDUS": 10.59,
+      "RM": 5.344,
+      "AGE": 100.0,
+      "DIS": 3.875,
+      "TAX": 277.0,
+      "PTRATIO": 18.6,
+      "LSTAT": 23.09,
+      "MEDV": 20.0,
+      "margin": 0.10621997995087273
     }
   ]
 }
